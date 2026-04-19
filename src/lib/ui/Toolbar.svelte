@@ -2,6 +2,7 @@
   import type { Editor } from '@tiptap/core';
   import type { PageSize } from '$lib/types';
   import { appState } from '$lib/state/app-state.svelte';
+  import AiStatusDot from '$lib/ui/AiStatusDot.svelte';
 
   interface Props {
     editor: Editor | undefined;
@@ -507,21 +508,24 @@
 
   <!-- AI group -->
   <div class="toolbar-group">
-    <button
-      class="toolbar-btn"
-      class:active={appState.aiAvailable && appState.aiEnabled}
-      title={appState.aiAvailable
-        ? 'AI autocomplete (Cmd+Shift+A)'
-        : 'AI autocomplete (configure API key in Settings)'}
-      onclick={() => onToggleAi?.()}
-      disabled={!appState.aiAvailable}
-    >
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z"></path>
-        <path d="M19 3L19.5 5L21.5 5.5L19.5 6L19 8L18.5 6L16.5 5.5L18.5 5Z"></path>
-        <path d="M5 16L5.5 18L7.5 18.5L5.5 19L5 21L4.5 19L2.5 18.5L4.5 18Z"></path>
-      </svg>
-    </button>
+    <span class="ai-btn-wrap">
+      <button
+        class="toolbar-btn"
+        class:active={appState.aiAvailable && appState.aiEnabled}
+        title={appState.aiAvailable
+          ? `AI autocomplete - ${appState.aiActiveProvider} (Cmd+Shift+A)`
+          : 'AI autocomplete (configure API key in Settings)'}
+        onclick={() => onToggleAi?.()}
+        disabled={!appState.aiAvailable}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5Z"></path>
+          <path d="M19 3L19.5 5L21.5 5.5L19.5 6L19 8L18.5 6L16.5 5.5L18.5 5Z"></path>
+          <path d="M5 16L5.5 18L7.5 18.5L5.5 19L5 21L4.5 19L2.5 18.5L4.5 18Z"></path>
+        </svg>
+      </button>
+      <AiStatusDot badge />
+    </span>
   </div>
 
   <div class="toolbar-divider"></div>
@@ -574,6 +578,11 @@
     align-items: center;
     gap: 1px;
     flex-shrink: 0;
+  }
+
+  .ai-btn-wrap {
+    position: relative;
+    display: inline-flex;
   }
 
   .toolbar-divider {

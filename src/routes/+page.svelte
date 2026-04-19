@@ -7,6 +7,7 @@
   import PageStack from '$lib/ui/PageStack.svelte';
   import StatusBar from '$lib/ui/StatusBar.svelte';
   import SettingsDialog from '$lib/ui/SettingsDialog.svelte';
+  import AiSetupBanner from '$lib/ui/AiSetupBanner.svelte';
   import { appState } from '$lib/state/app-state.svelte';
   import {
     openFile,
@@ -240,6 +241,7 @@
   </PageStack>
   <StatusBar />
   <SettingsDialog />
+  <AiSetupBanner />
 </main>
 
 <style>
