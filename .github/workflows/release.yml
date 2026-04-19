@@ -1,22 +1,19 @@
 name: release
 
 # Builds the Tauri app for macOS (arm64 + x86_64), Windows, and Linux
-# whenever a tag matching v* is pushed, then creates a GitHub release
-# as a draft with the produced installers (.dmg / .msi / .exe /
-# .AppImage / .deb) attached as assets.
+# whenever a tag matching v* is pushed, patches tauri.conf.json to
+# match the tag version, renames bundles to descriptive OS-named
+# files, and attaches them to a draft GitHub release.
 #
-# Trigger: `git tag v0.1.0 && git push origin v0.1.0` (or create the
-# tag via the GitHub UI). Review the draft release, then publish.
+# Trigger: `git tag v0.1.0 && git push origin v0.1.0`. Review the
+# draft release in the GitHub UI, then publish.
 
 on:
   push:
     tags:
       - 'v*'
-  # Also allow manual runs without a tag (for debugging the workflow itself).
   workflow_dispatch:
 
-# Only one release build per ref at a time; cancel stale runs if a
-# new release supersedes the old one.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: true
@@ -29,19 +26,19 @@ jobs:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
-            label: macos-arm64
+            label: macOS-AppleSilicon
           - os: macos-13
             target: x86_64-apple-darwin
-            label: macos-x64
+            label: macOS-Intel
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            label: linux-x64
+            label: Linux-x86_64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            label: windows-x64
+            label: Windows-x86_64
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write  # needed to upload release assets
+      contents: write
 
     steps:
       - name: Checkout
@@ -84,33 +81,61 @@ jobs:
             file \
             libxdo-dev
 
+      - name: Resolve version from tag
+        id: ver
+        shell: bash
+        run: |
+          REF="${GITHUB_REF_NAME:-v0.0.0-dev}"
+          echo "version=${REF#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Patch tauri.conf.json version
+        shell: bash
+        run: |
+          node -e "const fs=require('fs');const p='src-tauri/tauri.conf.json';const j=JSON.parse(fs.readFileSync(p));j.version='${{ steps.ver.outputs.version }}';fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n');"
+          grep '"version"' src-tauri/tauri.conf.json
+
       - name: Install JS deps
         run: pnpm install --frozen-lockfile
 
-      - name: Build Tauri app and upload to release
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Ante ${{ github.ref_name }}'
-          releaseBody: 'See the assets below to download and install. Unsigned builds - macOS users may need `xattr -d com.apple.quarantine /Applications/ante.app`.'
-          releaseDraft: true
-          prerelease: false
-          args: --target ${{ matrix.target }}
+      - name: Build Tauri app
+        run: pnpm tauri build --target ${{ matrix.target }}
 
-      # When this workflow is run via workflow_dispatch (no release), upload
-      # the built bundle as a workflow artifact instead so you can still
-      # grab the installers without needing a release.
-      - name: Upload debug artifact (workflow_dispatch only)
+      - name: Stage renamed artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          L="${{ matrix.label }}"
+          BD="src-tauri/target/${{ matrix.target }}/release/bundle"
+          shopt -s nullglob
+          for src in "$BD"/dmg/*.dmg; do cp "$src" "artifacts/ante-${L}.dmg"; done
+          for src in "$BD"/deb/*.deb; do cp "$src" "artifacts/ante-${L}.deb"; done
+          for src in "$BD"/appimage/*.AppImage; do cp "$src" "artifacts/ante-${L}.AppImage"; done
+          for src in "$BD"/msi/*.msi; do cp "$src" "artifacts/ante-${L}.msi"; done
+          for src in "$BD"/nsis/*.exe; do cp "$src" "artifacts/ante-${L}-Setup.exe"; done
+          ls -la artifacts/
+
+      - name: Upload to draft release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: 'Ante ${{ github.ref_name }}'
+          draft: true
+          generate_release_notes: true
+          body: |
+            Unsigned builds - first launch will be blocked by Gatekeeper / SmartScreen.
+
+            - **macOS**: after install run `xattr -d com.apple.quarantine /Applications/ante.app`
+            - **Windows**: click "More info" -> "Run anyway" on the SmartScreen dialog
+
+            Downloads below, or the "Download" section in the [README](https://github.com/willhama/ante#download) for the always-latest links.
+          files: artifacts/*
+          fail_on_unmatched_files: false
+
+      - name: Upload workflow artifact
         if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: ante-${{ matrix.label }}
-          path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.msi
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.exe
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.AppImage
-            src-tauri/target/${{ matrix.target }}/release/bundle/**/*.deb
+          path: artifacts/
           if-no-files-found: ignore

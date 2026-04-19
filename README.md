@@ -16,6 +16,20 @@ It is not trying to be Word. It is trying to be the thing you reach for when you
   <img src="demo-gif.gif" alt="ante demo" width="720">
 </p>
 
+## Download
+
+Grab the latest release for your platform:
+
+[![macOS (Apple Silicon)](https://img.shields.io/badge/macOS-Apple%20Silicon-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/willhama/ante/releases/latest/download/ante-macOS-AppleSilicon.dmg)
+[![macOS (Intel)](https://img.shields.io/badge/macOS-Intel-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/willhama/ante/releases/latest/download/ante-macOS-Intel.dmg)
+[![Windows (x64)](https://img.shields.io/badge/Windows-x64-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/willhama/ante/releases/latest/download/ante-Windows-x86_64-Setup.exe)
+[![Linux (AppImage)](https://img.shields.io/badge/Linux-AppImage-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/willhama/ante/releases/latest/download/ante-Linux-x86_64.AppImage)
+[![Linux (Deb)](https://img.shields.io/badge/Linux-deb-FCC624?style=for-the-badge&logo=debian&logoColor=white)](https://github.com/willhama/ante/releases/latest/download/ante-Linux-x86_64.deb)
+
+[All releases](https://github.com/willhama/ante/releases)
+
+Builds are currently unsigned. On macOS, run `xattr -d com.apple.quarantine /Applications/ante.app` after installing. On Windows, click "More info" then "Run anyway" on the SmartScreen prompt.
+
 ## Status
 
 Early. Usable for plain prose. Expect rough edges while the core settles.
