@@ -1,17 +1,18 @@
 name: release
 
 # Builds the Tauri app for macOS (arm64 + x86_64), Windows, and Linux
-# whenever a release is published in the GitHub UI, and uploads the
-# produced installers (.dmg / .msi / .exe / .AppImage / .deb) as
-# assets on that same release.
+# whenever a tag matching v* is pushed, then creates a GitHub release
+# as a draft with the produced installers (.dmg / .msi / .exe /
+# .AppImage / .deb) attached as assets.
 #
-# Trigger: create a draft release in the GitHub UI, click "Publish".
-# Workflow picks it up via `release.published`, matrix-builds, uploads.
+# Trigger: `git tag v0.1.0 && git push origin v0.1.0` (or create the
+# tag via the GitHub UI). Review the draft release, then publish.
 
 on:
-  release:
-    types: [published]
-  # Also allow manual runs without a release (for debugging the workflow itself).
+  push:
+    tags:
+      - 'v*'
+  # Also allow manual runs without a tag (for debugging the workflow itself).
   workflow_dispatch:
 
 # Only one release build per ref at a time; cancel stale runs if a
@@ -91,7 +92,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          releaseId: ${{ github.event.release.id }}
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Ante ${{ github.ref_name }}'
+          releaseBody: 'See the assets below to download and install. Unsigned builds - macOS users may need `xattr -d com.apple.quarantine /Applications/ante.app`.'
+          releaseDraft: true
+          prerelease: false
           args: --target ${{ matrix.target }}
 
       # When this workflow is run via workflow_dispatch (no release), upload
