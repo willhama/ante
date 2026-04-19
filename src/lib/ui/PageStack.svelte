@@ -191,6 +191,11 @@
     display: flex;
     justify-content: center;
     padding: 32px 0;
+    scrollbar-width: none;
+  }
+
+  .document-area::-webkit-scrollbar {
+    display: none;
   }
 
   .page-stack {
