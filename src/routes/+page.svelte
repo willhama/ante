@@ -5,6 +5,8 @@
   import EditorComponent from '$lib/editor/Editor.svelte';
   import Toolbar from '$lib/ui/Toolbar.svelte';
   import PageStack from '$lib/ui/PageStack.svelte';
+  import StatusBar from '$lib/ui/StatusBar.svelte';
+  import SettingsDialog from '$lib/ui/SettingsDialog.svelte';
   import { appState } from '$lib/state/app-state.svelte';
   import {
     openFile,
@@ -28,6 +30,7 @@
 
   function handlePageBreaksChange(breaks: number[]): void {
     pageBreaks = breaks;
+    appState.totalPages = breaks.length + 1;
   }
 
   /** Bridge between file-ops and the Tiptap editor. */
@@ -38,9 +41,23 @@
     };
   }
 
+  /** Compute word and character counts from editor plain text. */
+  function updateCounts(): void {
+    const ed = editorComponent?.getEditor();
+    if (!ed) return;
+    const text = ed.getText();
+    // Word count: split on whitespace, filter empty tokens
+    const words = text.trim() === '' ? 0 : text.trim().split(/\s+/).length;
+    // Char count without spaces
+    const chars = text.replace(/\s/g, '').length;
+    appState.wordCount = words;
+    appState.charCount = chars;
+  }
+
   function handleContentChange(): void {
     const current = editorComponent?.getHTML() ?? '';
     appState.isDirty = current !== getSavedSnapshot();
+    updateCounts();
   }
 
   function handleSelectionUpdate(): void {
@@ -51,13 +68,15 @@
 
   async function handleNew(): Promise<void> {
     await newFile(getBridge());
+    updateCounts();
   }
 
   async function handleOpen(): Promise<void> {
     await openFile(getBridge());
-    // After opening, update editor reference
+    // After opening, update editor reference and counts
     editor = editorComponent?.getEditor();
     toolbar?.bumpTick();
+    updateCounts();
   }
 
   async function handleSave(): Promise<void> {
@@ -69,6 +88,13 @@
     appState.aiEnabled = !appState.aiEnabled;
     editorComponent?.setGhostEnabled(appState.aiEnabled);
   }
+
+  // Keep the ghost-completion plugin in sync with config + toggle state.
+  // Without this, saving the API key in Settings flips aiAvailable but the
+  // plugin stays disabled until the next app reload.
+  $effect(() => {
+    editorComponent?.setGhostEnabled(appState.aiEnabled && appState.aiAvailable);
+  });
 
   onMount(() => {
     // Grab editor reference once mounted
@@ -109,19 +135,39 @@
         toggleAi();
         return;
       }
+
+      // Cmd+,: Open settings
+      if (e.metaKey && e.key === ',') {
+        e.preventDefault();
+        appState.settingsOpen = true;
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeydown);
 
-    // Query AI availability from the backend on startup.
+    // Query AI availability + persisted preferences from the backend on startup.
     (async () => {
       try {
         const status = await invoke<{ enabled: boolean; model: string }>('get_ai_config');
         appState.setAiAvailable(status.enabled);
-        // Sync extension state with current toggle.
-        editorComponent?.setGhostEnabled(appState.aiEnabled && status.enabled);
       } catch {
         appState.setAiAvailable(false);
+      }
+      try {
+        const meta = await invoke<{
+          has_key: boolean;
+          model: string;
+          base_url: string;
+          max_tokens: number;
+          trigger_speed: string;
+        }>('load_ai_config');
+        appState.aiMaxTokens = meta.max_tokens;
+        if (meta.trigger_speed === 'eager' || meta.trigger_speed === 'balanced' || meta.trigger_speed === 'relaxed') {
+          appState.aiTriggerSpeed = meta.trigger_speed;
+        }
+      } catch {
+        // Store unavailable (dev browser); keep defaults.
       }
     })();
 
@@ -181,6 +227,8 @@
       onPageBreaksChange={handlePageBreaksChange}
     />
   </PageStack>
+  <StatusBar />
+  <SettingsDialog />
 </main>
 
 <style>

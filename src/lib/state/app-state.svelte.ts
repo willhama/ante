@@ -32,6 +32,41 @@ let headerText = $state<string>('');
 /** Shared footer text rendered in the bottom margin of every page. */
 let footerText = $state<string>('');
 
+/** Word count derived from editor plain text. Updated by +page.svelte. */
+let wordCount = $state<number>(0);
+
+/** Character count (no spaces) derived from editor plain text. Updated by +page.svelte. */
+let charCount = $state<number>(0);
+
+/** Current page number (1-based). Updated by +page.svelte from scroll position. */
+let currentPage = $state<number>(1);
+
+/** Total page count. Updated by +page.svelte. */
+let totalPages = $state<number>(1);
+
+/** Whether the settings dialog is open. */
+let settingsOpen = $state<boolean>(false);
+
+/** Trigger speed for ghost autocomplete. Controls debounce + cooldown. */
+export type AiTriggerSpeed = 'eager' | 'balanced' | 'relaxed';
+let aiTriggerSpeed = $state<AiTriggerSpeed>('balanced');
+
+/** Max tokens per suggestion. Controls suggestion length. */
+let aiMaxTokens = $state<number>(80);
+
+const TRIGGER_SPEED_DEBOUNCE: Record<AiTriggerSpeed, number> = {
+  eager: 300,
+  balanced: 800,
+  relaxed: 1500,
+};
+const TRIGGER_SPEED_COOLDOWN: Record<AiTriggerSpeed, number> = {
+  eager: 800,
+  balanced: 2000,
+  relaxed: 3500,
+};
+const aiDebounceMs: number = $derived(TRIGGER_SPEED_DEBOUNCE[aiTriggerSpeed]);
+const aiCooldownMs: number = $derived(TRIGGER_SPEED_COOLDOWN[aiTriggerSpeed]);
+
 /** Pixel dimensions (at 96 dpi) for each supported page size. */
 const PAGE_SIZE_MAP: Record<PageSize, PageDimensions> = {
   letter: { width: 816, height: 1056 },
@@ -116,4 +151,28 @@ export const appState = {
 
   get footerText(): string { return footerText; },
   set footerText(v: string) { footerText = v; },
+
+  get wordCount(): number { return wordCount; },
+  set wordCount(v: number) { wordCount = v; },
+
+  get charCount(): number { return charCount; },
+  set charCount(v: number) { charCount = v; },
+
+  get currentPage(): number { return currentPage; },
+  set currentPage(v: number) { currentPage = v; },
+
+  get totalPages(): number { return totalPages; },
+  set totalPages(v: number) { totalPages = v; },
+
+  get settingsOpen(): boolean { return settingsOpen; },
+  set settingsOpen(v: boolean) { settingsOpen = v; },
+
+  get aiTriggerSpeed(): AiTriggerSpeed { return aiTriggerSpeed; },
+  set aiTriggerSpeed(v: AiTriggerSpeed) { aiTriggerSpeed = v; },
+
+  get aiMaxTokens(): number { return aiMaxTokens; },
+  set aiMaxTokens(v: number) { aiMaxTokens = v; },
+
+  get aiDebounceMs(): number { return aiDebounceMs; },
+  get aiCooldownMs(): number { return aiCooldownMs; },
 };

@@ -5,6 +5,7 @@ import type { EditorState, Transaction } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { appState } from '$lib/state/app-state.svelte';
 
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
@@ -293,7 +294,7 @@ export const GhostCompletion = Extension.create<GhostCompletionOptions>({
 
             const now = Date.now();
             // Cooldown: minimum interval between successive request starts.
-            if (now - lastRequestStartedAt < options.cooldownMs) return;
+            if (now - lastRequestStartedAt < appState.aiCooldownMs) return;
             // Rate-limit backoff: if we were 429'd, wait.
             if (now < rateLimitedUntil) return;
 
@@ -345,7 +346,7 @@ export const GhostCompletion = Extension.create<GhostCompletionOptions>({
                 .catch(() => {
                   // Silent. Includes the "not configured" case.
                 });
-            }, options.debounceMs);
+            }, appState.aiDebounceMs);
           }
 
           // Wire up Tauri event listeners.
