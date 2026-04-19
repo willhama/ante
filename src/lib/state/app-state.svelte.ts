@@ -26,6 +26,9 @@ let aiEnabled = $state<boolean>(true);
 /** Whether the AI feature is available (API key present at startup). */
 let aiAvailable = $state<boolean>(false);
 
+/** Slug of the currently active AI provider. Surfaced in toolbar tooltip. */
+let aiActiveProvider = $state<string>('openai');
+
 /** Shared header text rendered in the top margin of every page. */
 let headerText = $state<string>('');
 
@@ -145,6 +148,9 @@ export const appState = {
 
   get aiAvailable(): boolean { return aiAvailable; },
   setAiAvailable(v: boolean): void { aiAvailable = v; },
+
+  get aiActiveProvider(): string { return aiActiveProvider; },
+  set aiActiveProvider(v: string) { aiActiveProvider = v; },
 
   get headerText(): string { return headerText; },
   set headerText(v: string) { headerText = v; },

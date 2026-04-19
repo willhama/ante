@@ -149,20 +149,31 @@
     // Query AI availability + persisted preferences from the backend on startup.
     (async () => {
       try {
-        const status = await invoke<{ enabled: boolean; model: string }>('get_ai_config');
+        const status = await invoke<{
+          enabled: boolean;
+          active_provider: string;
+          model: string;
+        }>('get_ai_config');
         appState.setAiAvailable(status.enabled);
+        appState.aiActiveProvider = status.active_provider;
       } catch {
         appState.setAiAvailable(false);
       }
       try {
         const meta = await invoke<{
-          has_key: boolean;
-          model: string;
-          base_url: string;
-          max_tokens: number;
+          active_provider: string;
+          providers: Record<string, {
+            has_key: boolean;
+            model: string;
+            base_url: string;
+            max_tokens: number;
+          }>;
           trigger_speed: string;
         }>('load_ai_config');
-        appState.aiMaxTokens = meta.max_tokens;
+        const activeSlot = meta.providers[meta.active_provider];
+        if (activeSlot) {
+          appState.aiMaxTokens = activeSlot.max_tokens;
+        }
         if (meta.trigger_speed === 'eager' || meta.trigger_speed === 'balanced' || meta.trigger_speed === 'relaxed') {
           appState.aiTriggerSpeed = meta.trigger_speed;
         }

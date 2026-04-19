@@ -20,6 +20,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
 thiserror = "2"
 tokio = { version = "1", features = ["fs", "sync", "rt", "macros"] }
 serde = { version = "1", features = ["derive"] }
@@ -30,4 +31,5 @@ tokio-stream = "0.1"
 eventsource-stream = "0.2"
 uuid = { version = "1", features = ["v4"] }
 tauri-plugin-store = "2"
+async-trait = "0.1"
 

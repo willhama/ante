@@ -17,6 +17,9 @@ importers:
       '@tauri-apps/plugin-dialog':
         specifier: ^2.7.0
         version: 2.7.0
+      '@tauri-apps/plugin-opener':
+        specifier: ^2.5.3
+        version: 2.5.3
       '@tiptap/core':
         specifier: ^3.22.3
         version: 3.22.3(@tiptap/pm@3.22.3)
@@ -638,6 +641,9 @@ packages:
 
   '@tauri-apps/plugin-dialog@2.7.0':
     resolution: {integrity: sha512-4nS/hfGMGCXiAS3LtVjH9AgsSAPJeG/7R+q8agTFqytjnMa4Zq95Bq8WzVDkckpanX+yyRHXnRtrKXkANKDHvw==}
+
+  '@tauri-apps/plugin-opener@2.5.3':
+    resolution: {integrity: sha512-CCcUltXMOfUEArbf3db3kCE7Ggy1ExBEBl51Ko2ODJ6GDYHRp1nSNlQm5uNCFY5k7/ufaK5Ib3Du/Zir19IYQQ==}
 
   '@tiptap/core@3.22.3':
     resolution: {integrity: sha512-Dv9MKK5BDWCF0N2l6/Pxv3JNCce2kwuWf2cKMBc2bEetx0Pn6o7zlFmSxMvYK4UtG1Tw9Yg/ZHi6QOFWK0Zm9Q==}
@@ -1651,6 +1657,10 @@ snapshots:
       '@tauri-apps/cli-win32-x64-msvc': 2.10.1
 
   '@tauri-apps/plugin-dialog@2.7.0':
+    dependencies:
+      '@tauri-apps/api': 2.10.1
+
+  '@tauri-apps/plugin-opener@2.5.3':
     dependencies:
       '@tauri-apps/api': 2.10.1
 

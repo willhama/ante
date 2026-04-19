@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { openUrl } from '@tauri-apps/plugin-opener';
   import { appState, type AiTriggerSpeed } from '$lib/state/app-state.svelte';
   import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
   import * as Dialog from '$lib/components/ui/dialog/index.js';
@@ -9,11 +10,18 @@
   import ExternalLink from '@lucide/svelte/icons/external-link';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
 
-  interface AiConfigMeta {
+  type ProviderId = 'openai' | 'openai-compatible' | 'anthropic';
+
+  interface ProviderMeta {
     has_key: boolean;
     model: string;
     base_url: string;
     max_tokens: number;
+  }
+
+  interface AiConfigMeta {
+    active_provider: string;
+    providers: Record<string, ProviderMeta>;
     trigger_speed: string;
   }
 
@@ -21,6 +29,19 @@
     ok: boolean;
     model_count: number | null;
     error: string | null;
+  }
+
+  interface SaveProviderPayload {
+    api_key?: string | null;
+    model?: string | null;
+    base_url?: string | null;
+    max_tokens?: number | null;
+  }
+
+  interface SaveAiConfigPayload {
+    active_provider?: string | null;
+    trigger_speed?: string | null;
+    providers?: Record<string, SaveProviderPayload>;
   }
 
   type SuggestionLength = 'short' | 'medium' | 'long';
@@ -37,41 +58,108 @@
     return 'long';
   }
 
-  const KNOWN_MODELS: { value: string; label: string; hint: string }[] = [
-    { value: 'gpt-4o-mini', label: 'gpt-4o-mini', hint: 'fast & cheap' },
-    { value: 'gpt-4o', label: 'gpt-4o', hint: 'balanced quality' },
-    { value: 'gpt-4.1-mini', label: 'gpt-4.1-mini', hint: 'newer mini' },
-    { value: 'gpt-4.1', label: 'gpt-4.1', hint: 'flagship quality' },
-    { value: 'gpt-3.5-turbo', label: 'gpt-3.5-turbo', hint: 'legacy, cheapest' },
-  ];
+  const PROVIDER_LABELS: Record<ProviderId, string> = {
+    openai: 'OpenAI',
+    'openai-compatible': 'OpenAI-compatible',
+    anthropic: 'Anthropic',
+  };
+
+  const PROVIDER_ORDER: ProviderId[] = ['openai', 'anthropic', 'openai-compatible'];
+
+  const PROVIDER_DEFAULTS: Record<ProviderId, { model: string; base_url: string }> = {
+    openai: { model: 'gpt-4o-mini', base_url: 'https://api.openai.com/v1' },
+    anthropic: { model: 'claude-haiku-4-5-20251001', base_url: 'https://api.anthropic.com' },
+    'openai-compatible': { model: '', base_url: '' },
+  };
+
+  const KNOWN_MODELS_BY_PROVIDER: Record<
+    ProviderId,
+    { value: string; label: string; hint: string }[]
+  > = {
+    openai: [
+      { value: 'gpt-4o-mini', label: 'gpt-4o-mini', hint: 'fast & cheap' },
+      { value: 'gpt-4o', label: 'gpt-4o', hint: 'balanced quality' },
+      { value: 'gpt-4.1-mini', label: 'gpt-4.1-mini', hint: 'newer mini' },
+      { value: 'gpt-4.1', label: 'gpt-4.1', hint: 'flagship quality' },
+    ],
+    anthropic: [
+      { value: 'claude-haiku-4-5-20251001', label: 'claude-haiku-4-5', hint: 'fast & cheap' },
+      { value: 'claude-sonnet-4-6', label: 'claude-sonnet-4-6', hint: 'balanced quality' },
+      { value: 'claude-opus-4-7', label: 'claude-opus-4-7', hint: 'top quality' },
+    ],
+    'openai-compatible': [],
+  };
+
   const CUSTOM_MODEL_VALUE = '__custom__';
 
-  let apiKey = $state('');
-  let model = $state('gpt-4o-mini');
-  let modelSelect = $state('gpt-4o-mini');
-  let baseUrl = $state('https://api.openai.com/v1');
+  /** Per-provider editable state. Mirrors the backend shape. */
+  interface ProviderFormState {
+    /** New API key typed by the user (never pre-filled). */
+    apiKey: string;
+    /** Whether the backend has a stored key for this provider. */
+    hasKey: boolean;
+    /** Selected model - either a known slug or CUSTOM_MODEL_VALUE. */
+    modelSelect: string;
+    /** Custom model input when modelSelect === CUSTOM_MODEL_VALUE. */
+    model: string;
+    /** Base URL (only shown for openai-compatible + under Advanced for openai/anthropic). */
+    baseUrl: string;
+    /** Max tokens (not shown per-provider; driven by suggestionLength below). */
+    maxTokens: number;
+    /** Debounced test-key state. */
+    testResult: AiTestResult | null;
+    testing: boolean;
+    /** Whether the user modified this provider's fields this session (controls save payload). */
+    dirty: boolean;
+  }
+
+  function emptyProviderForm(p: ProviderId): ProviderFormState {
+    return {
+      apiKey: '',
+      hasKey: false,
+      modelSelect: PROVIDER_DEFAULTS[p].model,
+      model: PROVIDER_DEFAULTS[p].model,
+      baseUrl: PROVIDER_DEFAULTS[p].base_url,
+      maxTokens: 80,
+      testResult: null,
+      testing: false,
+      dirty: false,
+    };
+  }
+
+  let activeProvider = $state<ProviderId>('openai');
+  let providerForms = $state<Record<ProviderId, ProviderFormState>>({
+    openai: emptyProviderForm('openai'),
+    'openai-compatible': emptyProviderForm('openai-compatible'),
+    anthropic: emptyProviderForm('anthropic'),
+  });
+
   let suggestionLength = $state<SuggestionLength>('medium');
   let triggerSpeed = $state<AiTriggerSpeed>('balanced');
   let showAdvanced = $state(false);
   let saving = $state(false);
   let saveError = $state('');
-  let hasKey = $state(false);
-  let testing = $state(false);
-  let testResult = $state<AiTestResult | null>(null);
   let testTimer: number | null = null;
 
-  const isCustomModel = $derived(modelSelect === CUSTOM_MODEL_VALUE);
+  const currentForm = $derived(providerForms[activeProvider]);
+  const isCustomModel = $derived(currentForm.modelSelect === CUSTOM_MODEL_VALUE);
   const currentModelHint = $derived(
-    KNOWN_MODELS.find((m) => m.value === modelSelect)?.hint ?? '',
+    KNOWN_MODELS_BY_PROVIDER[activeProvider].find((m) => m.value === currentForm.modelSelect)?.hint ?? '',
   );
+  const isOpenAiCompatible = $derived(activeProvider === 'openai-compatible');
 
   $effect(() => {
     if (appState.settingsOpen) {
       loadConfig();
     } else {
-      apiKey = '';
+      // Clear any pasted keys when dialog closes.
+      for (const p of PROVIDER_ORDER) {
+        providerForms[p].apiKey = '';
+        providerForms[p].testResult = null;
+        providerForms[p].testing = false;
+        providerForms[p].dirty = false;
+      }
       saveError = '';
-      testResult = null;
       if (testTimer !== null) {
         window.clearTimeout(testTimer);
         testTimer = null;
@@ -79,58 +167,121 @@
     }
   });
 
-  async function runTest(key: string): Promise<void> {
-    testing = true;
+  async function runTest(provider: ProviderId, key: string): Promise<void> {
+    providerForms[provider].testing = true;
     try {
-      testResult = await invoke<AiTestResult>('test_ai_config', {
+      const baseUrl = providerForms[provider].baseUrl.trim();
+      const result = await invoke<AiTestResult>('test_ai_config', {
         payload: {
+          provider,
           api_key: key.trim() || null,
-          base_url: baseUrl.trim() || null,
+          base_url: baseUrl || null,
         },
       });
+      providerForms[provider].testResult = result;
     } catch {
-      testResult = { ok: false, model_count: null, error: 'test failed' };
+      providerForms[provider].testResult = {
+        ok: false,
+        model_count: null,
+        error: 'test failed',
+      };
     } finally {
-      testing = false;
+      providerForms[provider].testing = false;
     }
   }
 
   /** Debounced auto-test when the user pastes/types a key. */
   function scheduleTest(): void {
     if (testTimer !== null) window.clearTimeout(testTimer);
-    testResult = null;
-    const key = apiKey.trim();
-    if (key.length < 20) return; // ignore partial input
+    const form = providerForms[activeProvider];
+    form.testResult = null;
+    form.dirty = true;
+    const key = form.apiKey.trim();
+    if (key.length < 20) return;
+    // For openai-compatible, require a base_url before testing - otherwise the
+    // test will hit api.openai.com with the wrong key and the user will be
+    // confused by a 401.
+    if (activeProvider === 'openai-compatible' && !form.baseUrl.trim()) return;
+    const provider = activeProvider;
     testTimer = window.setTimeout(() => {
       testTimer = null;
-      runTest(key);
+      runTest(provider, key);
     }, 400);
   }
 
   async function loadConfig(): Promise<void> {
     try {
       const meta = await invoke<AiConfigMeta>('load_ai_config');
-      hasKey = meta.has_key;
-      model = meta.model || 'gpt-4o-mini';
-      baseUrl = meta.base_url || 'https://api.openai.com/v1';
-      suggestionLength = tokensToLength(meta.max_tokens || 80);
+      // Reset local state from backend.
+      const backendActive = isProviderId(meta.active_provider) ? meta.active_provider : 'openai';
+      activeProvider = backendActive;
+
+      for (const p of PROVIDER_ORDER) {
+        const slot = meta.providers[p] ?? {
+          has_key: false,
+          model: PROVIDER_DEFAULTS[p].model,
+          base_url: PROVIDER_DEFAULTS[p].base_url,
+          max_tokens: 80,
+        };
+        const effectiveModel = slot.model || PROVIDER_DEFAULTS[p].model;
+        const knownModels = KNOWN_MODELS_BY_PROVIDER[p];
+        const modelSelect =
+          knownModels.some((m) => m.value === effectiveModel) && effectiveModel !== ''
+            ? effectiveModel
+            : CUSTOM_MODEL_VALUE;
+        providerForms[p] = {
+          apiKey: '',
+          hasKey: slot.has_key,
+          modelSelect,
+          model: effectiveModel,
+          baseUrl: slot.base_url || PROVIDER_DEFAULTS[p].base_url,
+          maxTokens: slot.max_tokens || 80,
+          testResult: null,
+          testing: false,
+          dirty: false,
+        };
+      }
+
+      suggestionLength = tokensToLength(providerForms[activeProvider].maxTokens);
       triggerSpeed =
         meta.trigger_speed === 'eager' ||
         meta.trigger_speed === 'balanced' ||
         meta.trigger_speed === 'relaxed'
           ? meta.trigger_speed
           : 'balanced';
-      modelSelect = KNOWN_MODELS.some((m) => m.value === model) ? model : CUSTOM_MODEL_VALUE;
-      apiKey = '';
     } catch {
       // No store yet (dev browser).
     }
   }
 
+  function isProviderId(v: string): v is ProviderId {
+    return v === 'openai' || v === 'openai-compatible' || v === 'anthropic';
+  }
+
+  function onProviderChange(e: Event): void {
+    const v = (e.currentTarget as HTMLSelectElement).value;
+    if (isProviderId(v)) {
+      activeProvider = v;
+      suggestionLength = tokensToLength(providerForms[v].maxTokens);
+    }
+  }
+
   function onModelSelectChange(e: Event): void {
     const value = (e.currentTarget as HTMLSelectElement).value;
-    modelSelect = value;
-    if (value !== CUSTOM_MODEL_VALUE) model = value;
+    const form = providerForms[activeProvider];
+    form.modelSelect = value;
+    form.dirty = true;
+    if (value !== CUSTOM_MODEL_VALUE) form.model = value;
+  }
+
+  function onCustomModelInput(e: Event): void {
+    providerForms[activeProvider].model = (e.currentTarget as HTMLInputElement).value;
+    providerForms[activeProvider].dirty = true;
+  }
+
+  function onBaseUrlInput(e: Event): void {
+    providerForms[activeProvider].baseUrl = (e.currentTarget as HTMLInputElement).value;
+    providerForms[activeProvider].dirty = true;
   }
 
   async function handleSave(event?: Event): Promise<void> {
@@ -138,18 +289,49 @@
     saving = true;
     saveError = '';
     try {
-      const effectiveModel = (isCustomModel ? model : modelSelect).trim() || 'gpt-4o-mini';
-      await invoke('save_ai_config', {
-        payload: {
-          api_key: apiKey.trim() || null,
-          model: effectiveModel,
-          base_url: baseUrl.trim() || null,
-          max_tokens: LENGTH_TO_TOKENS[suggestionLength],
-          trigger_speed: triggerSpeed,
-        },
-      });
-      const status = await invoke<{ enabled: boolean; model: string }>('get_ai_config');
+      // Build per-provider payload ONLY for providers the user touched,
+      // plus the active provider's max_tokens (driven by suggestionLength).
+      const providers: Record<string, SaveProviderPayload> = {};
+      for (const p of PROVIDER_ORDER) {
+        const form = providerForms[p];
+        const touched = form.dirty || p === activeProvider;
+        if (!touched) continue;
+        const effectiveModel =
+          (form.modelSelect === CUSTOM_MODEL_VALUE ? form.model : form.modelSelect).trim() ||
+          PROVIDER_DEFAULTS[p].model;
+
+        const providerPayload: SaveProviderPayload = {
+          model: effectiveModel || null,
+          base_url: form.baseUrl.trim() || null,
+        };
+        // api_key: only send if user typed something.
+        //   empty string stays as null (untouched) - dedicated UI action would
+        //   be needed to clear the stored key.
+        if (form.apiKey.trim()) {
+          providerPayload.api_key = form.apiKey.trim();
+        }
+        if (p === activeProvider) {
+          providerPayload.max_tokens = LENGTH_TO_TOKENS[suggestionLength];
+        } else {
+          providerPayload.max_tokens = form.maxTokens;
+        }
+        providers[p] = providerPayload;
+      }
+
+      const payload: SaveAiConfigPayload = {
+        active_provider: activeProvider,
+        trigger_speed: triggerSpeed,
+        providers,
+      };
+
+      await invoke('save_ai_config', { payload });
+      const status = await invoke<{
+        enabled: boolean;
+        active_provider: string;
+        model: string;
+      }>('get_ai_config');
       appState.setAiAvailable(status.enabled);
+      appState.aiActiveProvider = status.active_provider;
       appState.aiMaxTokens = LENGTH_TO_TOKENS[suggestionLength];
       appState.aiTriggerSpeed = triggerSpeed;
       appState.settingsOpen = false;
@@ -161,8 +343,20 @@
   }
 
   function openApiKeysPage(): void {
-    window.open('https://platform.openai.com/api-keys', '_blank', 'noopener,noreferrer');
+    const url =
+      activeProvider === 'openai'
+        ? 'https://platform.openai.com/api-keys'
+        : activeProvider === 'anthropic'
+          ? 'https://console.anthropic.com/settings/keys'
+          : null;
+    if (url) {
+      openUrl(url).catch(() => {
+        // Opener may be unavailable in dev browser; fall back silently.
+      });
+    }
   }
+
+  const showKeyLink = $derived(activeProvider !== 'openai-compatible');
 
   const selectClass =
     'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
@@ -179,7 +373,7 @@
       <div class="flex items-center gap-2 pb-3 border-b">
         <Sparkles class="size-4 text-muted-foreground" />
         <h3 class="text-sm font-semibold flex-1">AI Autocomplete</h3>
-        {#if hasKey}
+        {#if currentForm.hasKey}
           <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">Key saved</span>
         {:else}
           <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">No key</span>
@@ -187,66 +381,129 @@
       </div>
 
       <div class="grid gap-3">
-        <Label for="api-key">OpenAI API key</Label>
-        <Input
-          id="api-key"
-          type="password"
-          placeholder={hasKey ? 'Enter new key to replace' : 'sk-...'}
-          bind:value={apiKey}
-          oninput={scheduleTest}
-          autocomplete="off"
-          spellcheck={false}
-        />
-        {#if testing}
-          <p class="text-xs text-muted-foreground">Testing key…</p>
-        {:else if testResult}
-          {#if testResult.ok}
-            <p class="text-xs text-emerald-600 dark:text-emerald-400">
-              Key valid{testResult.model_count !== null ? ` — ${testResult.model_count} models available` : ''}.
-              OpenAI does not expose credit balance to API keys; check platform.openai.com/usage.
-            </p>
-          {:else}
-            <p class="text-xs text-destructive">{testResult.error ?? 'Key check failed'}</p>
-          {/if}
+        <Label for="provider-select">Provider</Label>
+        <select
+          id="provider-select"
+          class={selectClass}
+          value={activeProvider}
+          onchange={onProviderChange}
+        >
+          {#each PROVIDER_ORDER as p}
+            <option value={p}>{PROVIDER_LABELS[p]}</option>
+          {/each}
+        </select>
+        {#if isOpenAiCompatible}
+          <p class="text-xs text-muted-foreground">
+            Works with Groq, Together, OpenRouter, local Ollama (http://localhost:11434/v1),
+            LM Studio, vLLM, and any endpoint that mimics OpenAI's /chat/completions API.
+          </p>
         {/if}
-        <p class="text-xs text-muted-foreground">
-          {hasKey ? 'Leave blank to keep the existing key.' : 'Required to enable AI ghost autocomplete.'}
-          <button
-            type="button"
-            onclick={openApiKeysPage}
-            class="inline-flex items-center gap-1 text-primary underline underline-offset-2 hover:opacity-80"
-          >
-            Get your key<ExternalLink class="size-3" />
-          </button>
-        </p>
       </div>
 
       <div class="grid gap-3">
-        <Label for="model-select">Model</Label>
-        <select
-          id="model-select"
-          class={selectClass}
-          value={modelSelect}
-          onchange={onModelSelectChange}
-        >
-          {#each KNOWN_MODELS as opt}
-            <option value={opt.value}>{opt.label} — {opt.hint}</option>
-          {/each}
-          <option value={CUSTOM_MODEL_VALUE}>Custom…</option>
-        </select>
-        {#if isCustomModel}
+        <Label for="api-key">API key</Label>
+        <Input
+          id="api-key"
+          type="password"
+          placeholder={currentForm.hasKey ? 'Enter new key to replace' : activeProvider === 'anthropic' ? 'sk-ant-...' : 'sk-...'}
+          value={currentForm.apiKey}
+          oninput={(e) => {
+            providerForms[activeProvider].apiKey = (e.currentTarget as HTMLInputElement).value;
+            scheduleTest();
+          }}
+          autocomplete="off"
+          spellcheck={false}
+        />
+        {#if currentForm.testing}
+          <p class="text-xs text-muted-foreground">Testing key{activeProvider === 'anthropic' ? ' (uses 1 token, fractions of a cent)' : ''}…</p>
+        {:else if currentForm.testResult}
+          {#if currentForm.testResult.ok}
+            <p class="text-xs text-emerald-600 dark:text-emerald-400">
+              Key valid{currentForm.testResult.model_count !== null ? ` - ${currentForm.testResult.model_count} models available` : ''}.
+              {#if activeProvider === 'openai'}
+                OpenAI does not expose credit balance to API keys; check platform.openai.com/usage.
+              {/if}
+            </p>
+          {:else}
+            <p class="text-xs text-destructive">{currentForm.testResult.error ?? 'Key check failed'}</p>
+          {/if}
+        {/if}
+        <p class="text-xs text-muted-foreground">
+          {currentForm.hasKey ? 'Leave blank to keep the existing key. Stored in your OS keychain.' : 'Required to enable AI ghost autocomplete. Stored in your OS keychain.'}
+          {#if showKeyLink}
+            <button
+              type="button"
+              onclick={openApiKeysPage}
+              class="inline-flex items-center gap-1 text-primary underline underline-offset-2 hover:opacity-80"
+            >
+              Get your key<ExternalLink class="size-3" />
+            </button>
+          {/if}
+        </p>
+      </div>
+
+      {#if isOpenAiCompatible}
+        <div class="grid gap-3">
+          <Label for="compat-base-url">Base URL</Label>
           <Input
-            id="model-custom"
+            id="compat-base-url"
             type="text"
-            placeholder="model-id"
-            bind:value={model}
+            placeholder="https://api.groq.com/openai/v1"
+            value={currentForm.baseUrl}
+            oninput={onBaseUrlInput}
             autocomplete="off"
             spellcheck={false}
           />
-        {:else if currentModelHint}
-          <p class="text-xs text-muted-foreground">{currentModelHint}</p>
-        {/if}
-      </div>
+          <p class="text-xs text-muted-foreground">
+            OpenAI-compatible /chat/completions endpoint. Required.
+          </p>
+        </div>
+
+        <div class="grid gap-3">
+          <Label for="compat-model">Model</Label>
+          <Input
+            id="compat-model"
+            type="text"
+            placeholder="model-id"
+            value={currentForm.model}
+            oninput={(e) => {
+              providerForms[activeProvider].model = (e.currentTarget as HTMLInputElement).value;
+              providerForms[activeProvider].modelSelect = CUSTOM_MODEL_VALUE;
+              providerForms[activeProvider].dirty = true;
+            }}
+            autocomplete="off"
+            spellcheck={false}
+          />
+        </div>
+      {:else}
+        <div class="grid gap-3">
+          <Label for="model-select">Model</Label>
+          <select
+            id="model-select"
+            class={selectClass}
+            value={currentForm.modelSelect}
+            onchange={onModelSelectChange}
+          >
+            {#each KNOWN_MODELS_BY_PROVIDER[activeProvider] as opt}
+              <option value={opt.value}>{opt.label} - {opt.hint}</option>
+            {/each}
+            <option value={CUSTOM_MODEL_VALUE}>Custom…</option>
+          </select>
+          {#if isCustomModel}
+            <Input
+              id="model-custom"
+              type="text"
+              placeholder="model-id"
+              value={currentForm.model}
+              oninput={onCustomModelInput}
+              autocomplete="off"
+              spellcheck={false}
+            />
+          {:else if currentModelHint}
+            <p class="text-xs text-muted-foreground">{currentModelHint}</p>
+          {/if}
+        </div>
+      {/if}
 
       <div class="grid grid-cols-2 gap-3">
         <div class="grid gap-3">
@@ -271,28 +528,35 @@
         Eager triggers sooner but spends more API calls while you think.
       </p>
 
-      <button
-        type="button"
-        class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground self-start"
-        onclick={() => (showAdvanced = !showAdvanced)}
-      >
-        <ChevronRight class="size-3 transition-transform {showAdvanced ? 'rotate-90' : ''}" />
-        Advanced
-      </button>
+      {#if !isOpenAiCompatible}
+        <button
+          type="button"
+          class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground self-start"
+          onclick={() => (showAdvanced = !showAdvanced)}
+        >
+          <ChevronRight class="size-3 transition-transform {showAdvanced ? 'rotate-90' : ''}" />
+          Advanced
+        </button>
 
-      {#if showAdvanced}
-        <div class="grid gap-3">
-          <Label for="base-url">Base URL</Label>
-          <Input
-            id="base-url"
-            type="text"
-            placeholder="https://api.openai.com/v1"
-            bind:value={baseUrl}
-            autocomplete="off"
-            spellcheck={false}
-          />
-          <p class="text-xs text-muted-foreground">OpenAI-compatible API endpoint.</p>
-        </div>
+        {#if showAdvanced}
+          <div class="grid gap-3">
+            <Label for="base-url">Base URL</Label>
+            <Input
+              id="base-url"
+              type="text"
+              placeholder={PROVIDER_DEFAULTS[activeProvider].base_url}
+              value={currentForm.baseUrl}
+              oninput={onBaseUrlInput}
+              autocomplete="off"
+              spellcheck={false}
+            />
+            <p class="text-xs text-muted-foreground">
+              {activeProvider === 'anthropic'
+                ? 'Anthropic API endpoint (rarely needs overriding).'
+                : 'OpenAI API endpoint (rarely needs overriding).'}
+            </p>
+          </div>
+        {/if}
       {/if}
 
       {#if saveError}
