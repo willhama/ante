@@ -12,6 +12,10 @@ That is the idea behind **ante**: a small, fast, desktop writing app. Pages on a
 
 It is not trying to be Word. It is trying to be the thing you reach for when you want to just write.
 
+<p align="center">
+  <img src="demo-gif.gif" alt="ante demo" width="720">
+</p>
+
 ## Status
 
 Early. Usable for plain prose. Expect rough edges while the core settles.
