@@ -177,18 +177,19 @@
 
   .handle {
     position: absolute;
-    width: 16px;
-    height: 16px;
-    background: #ef4444;
-    border: 2px solid #ffffff;
+    width: 12px;
+    height: 12px;
+    background: var(--primary, oklch(0.205 0 0));
+    border: 2px solid var(--panel-bg, #ffffff);
     border-radius: 50%;
-    box-shadow: 0 1px 4px color-mix(in srgb, #000 45%, transparent);
+    box-shadow: 0 1px 3px color-mix(in srgb, #000 30%, transparent);
     pointer-events: auto;
     transform: translate(-50%, -50%);
+    transition: transform 0.08s ease;
   }
 
   .handle:hover {
-    background: #dc2626;
+    transform: translate(-50%, -50%) scale(1.2);
   }
 
   .nw { top: 0; left: 0; cursor: nwse-resize; }
