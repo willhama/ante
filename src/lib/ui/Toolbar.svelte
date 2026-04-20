@@ -12,9 +12,10 @@
     onSaveAs?: () => void;
     onToggleSidebar?: () => void;
     onToggleAi?: () => void;
+    onInsertImage?: () => void;
   }
 
-  let { editor, onNew, onOpen, onSave, onSaveAs, onToggleSidebar, onToggleAi }: Props = $props();
+  let { editor, onNew, onOpen, onSave, onSaveAs, onToggleSidebar, onToggleAi, onInsertImage }: Props = $props();
 
   function setPageSize(e: Event): void {
     appState.pageSize = (e.target as HTMLSelectElement).value as PageSize;
@@ -531,6 +532,19 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
         <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+      </svg>
+    </button>
+    <button
+      class="toolbar-btn"
+      title="Insert image"
+      aria-label="Insert image"
+      onclick={() => onInsertImage?.()}
+      disabled={!editor}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+        <polyline points="21 15 16 10 5 21"></polyline>
       </svg>
     </button>
   </div>

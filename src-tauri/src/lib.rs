@@ -17,6 +17,7 @@ pub fn run() {
             commands::move_path,
             commands::save_file,
             commands::save_file_as,
+            commands::pick_image,
             ai::stream_completion,
             ai::cancel_completion,
             ai::get_ai_config,

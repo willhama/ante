@@ -32,4 +32,5 @@ eventsource-stream = "0.2"
 uuid = { version = "1", features = ["v4"] }
 tauri-plugin-store = "2"
 async-trait = "0.1"
+base64 = "0.22"
 
