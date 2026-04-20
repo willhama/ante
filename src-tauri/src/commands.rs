@@ -1,4 +1,5 @@
 use crate::errors::AnteError;
+use base64::Engine as _;
 use serde::Serialize;
 use tauri_plugin_dialog::DialogExt;
 
@@ -24,6 +25,12 @@ pub struct DirEntryInfo {
     pub name: String,
     pub path: String,
     pub is_dir: bool,
+}
+
+#[derive(Serialize)]
+pub struct PickedImage {
+    pub src: String,
+    pub title: String,
 }
 
 /// Maximum number of entries returned from list_directory. Prevents pathological
@@ -184,6 +191,62 @@ fn validate_utf8(buf: Vec<u8>, path: &str) -> Result<String, AnteError> {
     })
 }
 
+/// Opens a native file picker filtered to images, reads the selected file,
+/// and returns a base64-encoded data URI alongside the source filename.
+#[tauri::command]
+pub async fn pick_image(app: tauri::AppHandle) -> Result<PickedImage, AnteError> {
+    let file_path = app
+        .dialog()
+        .file()
+        .add_filter("Images", &["png", "jpg", "jpeg", "gif", "webp", "svg"])
+        .add_filter("All Files", &["*"])
+        .blocking_pick_file();
+
+    let path = match file_path {
+        Some(p) => p.to_string(),
+        None => return Err(AnteError::DialogCancelled),
+    };
+
+    let metadata = tokio::fs::metadata(&path).await?;
+    if metadata.len() > MAX_FILE_SIZE {
+        return Err(AnteError::FileTooLarge(format!(
+            "Image is {} bytes (limit: {} bytes)",
+            metadata.len(),
+            MAX_FILE_SIZE
+        )));
+    }
+
+    let bytes = tokio::fs::read(&path).await?;
+    let mime = mime_from_path(&path);
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    let title = std::path::Path::new(&path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("image")
+        .to_string();
+    Ok(PickedImage {
+        src: format!("data:{};base64,{}", mime, encoded),
+        title,
+    })
+}
+
+fn mime_from_path(path: &str) -> &'static str {
+    let lower = path.to_lowercase();
+    if lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if lower.ends_with(".png") {
+        "image/png"
+    } else if lower.ends_with(".gif") {
+        "image/gif"
+    } else if lower.ends_with(".webp") {
+        "image/webp"
+    } else if lower.ends_with(".svg") {
+        "image/svg+xml"
+    } else {
+        "image/octet-stream"
+    }
+}
+
 /// Opens a native file dialog and reads the selected file.
 #[tauri::command]
 pub async fn open_file(app: tauri::AppHandle) -> Result<FilePayload, AnteError> {
@@ -333,6 +396,24 @@ mod tests {
         let buf = "Hallo, Welt! Gruesse aus Oesterreich".as_bytes().to_vec();
         let result = validate_utf8(buf, "utf8.txt");
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_mime_from_path_known_extensions() {
+        assert_eq!(mime_from_path("photo.jpg"), "image/jpeg");
+        assert_eq!(mime_from_path("photo.jpeg"), "image/jpeg");
+        assert_eq!(mime_from_path("PHOTO.JPEG"), "image/jpeg");
+        assert_eq!(mime_from_path("scan.PNG"), "image/png");
+        assert_eq!(mime_from_path("anim.gif"), "image/gif");
+        assert_eq!(mime_from_path("shot.webp"), "image/webp");
+        assert_eq!(mime_from_path("icon.svg"), "image/svg+xml");
+    }
+
+    #[test]
+    fn test_mime_from_path_unknown_and_missing() {
+        assert_eq!(mime_from_path("data.bin"), "image/octet-stream");
+        assert_eq!(mime_from_path("no-extension"), "image/octet-stream");
+        assert_eq!(mime_from_path(""), "image/octet-stream");
     }
 
     #[test]

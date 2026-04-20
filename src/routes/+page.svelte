@@ -117,6 +117,16 @@
     await saveFile(getBridge());
   }
 
+  async function handleInsertImage(): Promise<void> {
+    try {
+      const picked = await invoke<{ src: string; title: string }>('pick_image');
+      const ed = editorComponent?.getEditor();
+      ed?.chain().focus().setImage({ src: picked.src, title: picked.title, alt: picked.title }).run();
+    } catch (e: unknown) {
+      if (typeof e === 'object' && e !== null && 'kind' in e && (e as { kind: string }).kind === 'dialog_cancelled') return;
+    }
+  }
+
   function toggleAi(): void {
     if (!appState.aiAvailable) return;
     appState.aiEnabled = !appState.aiEnabled;
@@ -270,6 +280,7 @@
     onSaveAs={() => saveFileAs(getBridge())}
     onToggleSidebar={() => (appState.sidebarOpen = !appState.sidebarOpen)}
     onToggleAi={toggleAi}
+    onInsertImage={handleInsertImage}
   />
   <div class="app-body">
     {#if appState.sidebarOpen}

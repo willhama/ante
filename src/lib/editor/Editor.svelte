@@ -8,10 +8,12 @@
   import { TextStyle } from '@tiptap/extension-text-style';
   import Color from '@tiptap/extension-color';
   import FontFamily from '@tiptap/extension-font-family';
+  import { NodeSelection } from '@tiptap/pm/state';
   import { FontSize } from './FontSize';
   import { IndentExtension } from './IndentExtension';
   import { PaginationExtension } from './PaginationPlugin';
   import { GhostCompletion } from './GhostCompletion';
+  import { AnteImage, ANTE_IMAGE_DRAG_EVENT, MIN_IMAGE_WIDTH } from './AnteImage';
   import { appState } from '$lib/state/app-state.svelte';
 
   interface Props {
@@ -26,6 +28,47 @@
 
   let container: HTMLDivElement;
   let editor = $state<Editor | undefined>(undefined);
+  let imageMenuVisible = $state(false);
+  let imageMenuX = $state(0);
+  let imageMenuY = $state(0);
+
+  function setImageLayout(layout: string): void {
+    editor?.chain().focus().updateAttributes('image', { layout }).run();
+  }
+
+  function adjustImageWidth(factor: number): void {
+    if (!editor) return;
+    const { selection } = editor.state;
+    if (!(selection instanceof NodeSelection) || selection.node.type.name !== 'image') return;
+    const attrWidth = selection.node.attrs.width as number | null;
+    let current: number | null = attrWidth;
+    if (!current) {
+      const domNode = editor.view.nodeDOM(selection.from) as HTMLElement | null;
+      const imgEl = domNode?.querySelector('img');
+      current = imgEl?.offsetWidth ?? null;
+    }
+    if (!current || !Number.isFinite(current)) return;
+    const newWidth = Math.max(MIN_IMAGE_WIDTH, Math.round(current * factor));
+    if (newWidth === current) return;
+    editor.chain().focus().updateAttributes('image', { width: newWidth }).run();
+    requestAnimationFrame(updateImageMenu);
+  }
+
+  function updateImageMenu(): void {
+    if (!editor) { imageMenuVisible = false; return; }
+    const { selection } = editor.state;
+    if (!(selection instanceof NodeSelection) || selection.node.type.name !== 'image') {
+      imageMenuVisible = false;
+      return;
+    }
+    const domNode = editor.view.nodeDOM(selection.from) as HTMLElement | null;
+    const img = domNode instanceof HTMLImageElement ? domNode : domNode?.querySelector('img');
+    if (!img) { imageMenuVisible = false; return; }
+    const rect = img.getBoundingClientRect();
+    imageMenuX = rect.left + rect.width / 2;
+    imageMenuY = rect.top - 8;
+    imageMenuVisible = true;
+  }
 
   export function getEditor(): Editor | undefined {
     return editor;
@@ -67,12 +110,13 @@
           },
         }),
         TextAlign.configure({
-          types: ['heading', 'paragraph'],
+          types: ['heading', 'paragraph', 'image'],
         }),
         IndentExtension,
         GhostCompletion.configure({
           enabled: appState.aiEnabled,
         }),
+        AnteImage,
         PaginationExtension.configure({
           contentHeightPerPage: appState.contentHeightPerPage,
           pageMargin: appState.pageMargin,
@@ -89,6 +133,7 @@
       },
       onSelectionUpdate: () => {
         onSelectionUpdate?.();
+        updateImageMenu();
       },
       editorProps: {
         attributes: {
@@ -113,18 +158,115 @@
       resizeObserver.observe(tiptapEl);
     }
 
+    // Hide bubble menu while a float image is being dragged, restore after.
+    const handleDragEvent = (e: Event) => {
+      const phase = (e as CustomEvent<{ phase: 'start' | 'end' }>).detail?.phase;
+      if (phase === 'start') {
+        imageMenuVisible = false;
+      } else if (phase === 'end') {
+        requestAnimationFrame(updateImageMenu);
+      }
+    };
+    editor.view.dom.addEventListener(ANTE_IMAGE_DRAG_EVENT, handleDragEvent);
+
+    // Reposition the bubble menu when the user scrolls the document area.
+    const scrollParent = container.closest('.document-area') as HTMLElement | null;
+    let scrollRafId: number | undefined;
+    const handleScroll = () => {
+      if (!imageMenuVisible || scrollRafId != null) return;
+      scrollRafId = requestAnimationFrame(() => {
+        scrollRafId = undefined;
+        updateImageMenu();
+      });
+    };
+    scrollParent?.addEventListener('scroll', handleScroll, { passive: true });
+
     return () => {
       if (rafId != null) cancelAnimationFrame(rafId);
+      if (scrollRafId != null) cancelAnimationFrame(scrollRafId);
       resizeObserver?.disconnect();
+      editor?.view.dom.removeEventListener(ANTE_IMAGE_DRAG_EVENT, handleDragEvent);
+      scrollParent?.removeEventListener('scroll', handleScroll);
       editor?.destroy();
       editor = undefined;
     };
   });
 </script>
 
+{#if imageMenuVisible}
+  <div
+    class="image-bubble-menu"
+    role="toolbar"
+    aria-label="Image layout"
+    style="left:{imageMenuX}px;top:{imageMenuY}px;"
+  >
+    <button class="bubble-btn" title="Inline" aria-label="Set image layout to inline" onmousedown={(e) => { e.preventDefault(); setImageLayout('inline'); }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+    </button>
+    <button class="bubble-btn" title="Wrap left" aria-label="Wrap text around image on the left" onmousedown={(e) => { e.preventDefault(); setImageLayout('wrap-left'); }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="4" width="8" height="8" rx="1"/><line x1="13" y1="6" x2="22" y2="6"/><line x1="13" y1="10" x2="22" y2="10"/><line x1="2" y1="16" x2="22" y2="16"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
+    </button>
+    <button class="bubble-btn" title="Wrap right" aria-label="Wrap text around image on the right" onmousedown={(e) => { e.preventDefault(); setImageLayout('wrap-right'); }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="14" y="4" width="8" height="8" rx="1"/><line x1="2" y1="6" x2="11" y2="6"/><line x1="2" y1="10" x2="11" y2="10"/><line x1="2" y1="16" x2="22" y2="16"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
+    </button>
+    <button class="bubble-btn" title="Float (drag to reposition)" aria-label="Float image, drag to reposition" onmousedown={(e) => { e.preventDefault(); setImageLayout('float'); }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M6 2v4M18 2v4M2 6h4M2 18h4M20 6h2M20 18h2M6 20v2M18 20v2"/></svg>
+    </button>
+    <span class="bubble-divider" aria-hidden="true"></span>
+    <button class="bubble-btn" title="Shrink image" aria-label="Shrink image" onmousedown={(e) => { e.preventDefault(); adjustImageWidth(0.9); }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+    <button class="bubble-btn" title="Enlarge image" aria-label="Enlarge image" onmousedown={(e) => { e.preventDefault(); adjustImageWidth(1.1); }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </button>
+  </div>
+{/if}
 <div class="editor-container" bind:this={container}></div>
 
 <style>
+  .image-bubble-menu {
+    position: fixed;
+    transform: translateX(-50%) translateY(-100%);
+    display: flex;
+    gap: 2px;
+    background: var(--panel-bg, #fff);
+    border: 1px solid var(--border-color, #e2e2e2);
+    border-radius: 6px;
+    padding: 3px;
+    box-shadow: 0 2px 12px color-mix(in srgb, var(--fg, #000) 20%, transparent);
+    z-index: 100;
+    pointer-events: auto;
+  }
+
+  .bubble-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--fg, #111);
+    cursor: pointer;
+    opacity: 0.7;
+    padding: 0;
+    transition: background-color 0.1s, opacity 0.1s;
+  }
+
+  .bubble-btn:hover {
+    background-color: var(--button-hover-bg, #f0f0f0);
+    opacity: 1;
+  }
+
+  .bubble-divider {
+    width: 1px;
+    height: 18px;
+    background-color: var(--border-color, #e2e2e2);
+    margin: 0 2px;
+    flex-shrink: 0;
+  }
+
   .editor-container {
     width: 100%;
     position: relative;
@@ -253,6 +395,72 @@
   /* First child: no top margin */
   .editor-container :global(.tiptap > *:first-child) {
     margin-top: 0;
+  }
+
+  /* Images */
+  .editor-container :global(.tiptap img) {
+    max-width: 100%;
+    height: auto;
+    border-radius: 2px;
+  }
+
+  .editor-container :global(.tiptap .ante-image-frame) {
+    position: relative;
+    display: inline-block;
+    line-height: 0;
+  }
+
+  .editor-container :global(.tiptap .ante-image-selected .ante-image-frame) {
+    outline: 2px solid var(--primary, oklch(0.205 0 0));
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  .editor-container :global(.tiptap .ante-image-resize-handle) {
+    position: absolute;
+    bottom: -8px;
+    right: -8px;
+    width: 18px;
+    height: 18px;
+    background: var(--primary, oklch(0.205 0 0));
+    border: 2px solid var(--panel-bg, #fff);
+    border-radius: 3px;
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--fg, #000) 35%, transparent);
+    cursor: nwse-resize;
+    display: none;
+    z-index: 3;
+    touch-action: none;
+    pointer-events: auto;
+  }
+
+  .editor-container :global(.tiptap .ante-image-selected .ante-image-resize-handle) {
+    display: block;
+  }
+
+  .editor-container :global(.tiptap .ante-image-caption) {
+    display: block;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 0.82em;
+    font-style: italic;
+    color: var(--gutter-fg, #666);
+    text-align: center;
+    margin-top: 6px;
+    padding: 2px 4px;
+    outline: none;
+    min-height: 1em;
+    line-height: 1.35;
+    cursor: text;
+    border-radius: 2px;
+  }
+
+  .editor-container :global(.tiptap .ante-image-caption:empty::before) {
+    content: attr(data-placeholder);
+    color: var(--gutter-fg, #aaa);
+    opacity: 0.5;
+  }
+
+  .editor-container :global(.tiptap .ante-image-caption:focus) {
+    background-color: color-mix(in srgb, var(--primary, #000) 6%, transparent);
   }
 
   /* Placeholder for empty editor */
