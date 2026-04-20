@@ -43,13 +43,28 @@
   let loading = $state(false);
   let errorMsg = $state<string | null>(null);
 
+  // User-navigated root override. When set, takes precedence over the active
+  // file's parent dir. Reset to null whenever the active file changes so the
+  // sidebar snaps back to the new file's folder.
+  let manualRoot = $state<string | null>(null);
+
   // Shared expansion + child cache used by every TreeNode.
   const expanded = new SvelteMap<string, boolean>();
   const cache = new SvelteMap<string, DirEntry[]>();
   const loadingSet = new SvelteSet<string>();
 
-  async function refreshRoot(targetPath: string): Promise<void> {
-    if (!targetPath) {
+  const effectiveRoot = $derived(
+    manualRoot ?? (appState.filePath ? parentDir(appState.filePath) : ''),
+  );
+
+  const canGoUp = $derived.by(() => {
+    if (!effectiveRoot) return false;
+    const up = parentDir(effectiveRoot);
+    return up !== effectiveRoot;
+  });
+
+  async function refreshRoot(dir: string): Promise<void> {
+    if (!dir) {
       rootEntries = [];
       rootPath = '';
       errorMsg = null;
@@ -61,26 +76,41 @@
     loading = true;
     errorMsg = null;
     try {
-      const result = await invoke<DirEntry[]>('list_directory', { path: targetPath });
+      const result = await invoke<DirEntry[]>('list_directory', { path: dir });
       rootEntries = result;
-      rootPath = parentDir(targetPath) || targetPath;
-      cache.set(rootPath, result);
+      rootPath = dir;
+      cache.set(dir, result);
     } catch (e) {
       errorMsg = e instanceof Error ? e.message : 'Failed to read directory';
       rootEntries = [];
+      rootPath = dir;
     } finally {
       loading = false;
     }
   }
 
-  // Re-read root when active file's parent dir changes (not when file itself changes inside same dir).
-  let lastRootPath = '';
+  function goUp(): void {
+    if (!canGoUp) return;
+    manualRoot = parentDir(effectiveRoot);
+  }
+
+  // Snap manualRoot back whenever the active file changes.
+  let lastFilePath = appState.filePath;
   $effect(() => {
-    const fp = appState.filePath ?? '';
-    const newRoot = fp ? parentDir(fp) : '';
-    if (newRoot !== lastRootPath) {
-      lastRootPath = newRoot;
-      refreshRoot(fp);
+    const fp = appState.filePath;
+    if (fp !== lastFilePath) {
+      lastFilePath = fp;
+      manualRoot = null;
+    }
+  });
+
+  // Refresh whenever the effective root changes (file change OR manual nav).
+  let lastEffectiveRoot = '';
+  $effect(() => {
+    const root = effectiveRoot;
+    if (root !== lastEffectiveRoot) {
+      lastEffectiveRoot = root;
+      refreshRoot(root);
     }
   });
 
@@ -89,8 +119,8 @@
   );
 
   onMount(() => {
-    if (appState.filePath) {
-      refreshRoot(appState.filePath);
+    if (effectiveRoot) {
+      refreshRoot(effectiveRoot);
     }
   });
 
@@ -158,6 +188,18 @@
 
 <aside class="file-explorer" style="width: {appState.sidebarWidth}px">
   <header class="header">
+    <button
+      type="button"
+      class="icon-btn"
+      title="Go to parent folder"
+      onclick={goUp}
+      disabled={!canGoUp}
+      aria-label="Go to parent folder"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"></polyline>
+      </svg>
+    </button>
     <span class="header-title" title={rootPath}>
       {rootPath ? basename(rootPath) || rootPath : 'No folder'}
     </span>
@@ -169,7 +211,7 @@
         cache.clear();
         expanded.clear();
         loadingSet.clear();
-        refreshRoot(appState.filePath ?? '');
+        refreshRoot(effectiveRoot);
       }}
       aria-label="Refresh"
     >
@@ -267,9 +309,14 @@
     padding: 0;
   }
 
-  .icon-btn:hover {
+  .icon-btn:hover:not(:disabled) {
     background: var(--accent, rgba(0, 0, 0, 0.06));
     color: var(--foreground, #111);
+  }
+
+  .icon-btn:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 
   .body {
