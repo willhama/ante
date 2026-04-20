@@ -1,4 +1,4 @@
-import Image from '@tiptap/extension-image'
+import Image, { type ImageOptions } from '@tiptap/extension-image'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 
 export type ImageLayout = 'inline' | 'wrap-left' | 'wrap-right' | 'float'
@@ -20,6 +20,13 @@ function readFileAsDataURL(file: File): Promise<string> {
 export const AnteImage = Image.extend({
   draggable: false,
   selectable: true,
+  addOptions(): ImageOptions {
+    const parent = this.parent?.() as ImageOptions | undefined
+    return {
+      ...(parent ?? ({} as ImageOptions)),
+      allowBase64: true,
+    }
+  },
   addAttributes() {
     return {
       ...this.parent?.(),

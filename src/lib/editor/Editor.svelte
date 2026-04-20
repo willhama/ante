@@ -418,41 +418,44 @@
 
   .editor-container :global(.tiptap .ante-image-resize-handle) {
     position: absolute;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     background: #ef4444;
     border: 2px solid #ffffff;
     border-radius: 50%;
-    box-shadow: 0 1px 3px color-mix(in srgb, #000 45%, transparent);
+    box-shadow: 0 1px 4px color-mix(in srgb, #000 50%, transparent);
     display: none;
-    z-index: 5;
+    z-index: 10;
     touch-action: none;
     pointer-events: auto;
   }
 
   .editor-container :global(.tiptap .ante-image-resize-handle:hover) {
     background: #dc2626;
-    transform: scale(1.15);
   }
 
   .editor-container :global(.tiptap .ante-image-resize-nw) {
-    top: -8px;
-    left: -8px;
+    top: 0;
+    left: 0;
+    transform: translate(-50%, -50%);
     cursor: nwse-resize;
   }
   .editor-container :global(.tiptap .ante-image-resize-ne) {
-    top: -8px;
-    right: -8px;
+    top: 0;
+    right: 0;
+    transform: translate(50%, -50%);
     cursor: nesw-resize;
   }
   .editor-container :global(.tiptap .ante-image-resize-sw) {
-    bottom: -8px;
-    left: -8px;
+    bottom: 0;
+    left: 0;
+    transform: translate(-50%, 50%);
     cursor: nesw-resize;
   }
   .editor-container :global(.tiptap .ante-image-resize-se) {
-    bottom: -8px;
-    right: -8px;
+    bottom: 0;
+    right: 0;
+    transform: translate(50%, 50%);
     cursor: nwse-resize;
   }
 
