@@ -92,32 +92,7 @@ export const AnteImage = Image.extend({
       if (initNode.attrs.alt) img.alt = initNode.attrs.alt as string
       if (initNode.attrs.title) img.title = initNode.attrs.title as string
 
-      type HandleDir = 'nw' | 'ne' | 'sw' | 'se'
-      const HANDLE_LABELS: Record<HandleDir, string> = {
-        nw: 'Resize from top-left (NW)',
-        ne: 'Resize from top-right (NE)',
-        sw: 'Resize from bottom-left (SW)',
-        se: 'Resize from bottom-right (SE)',
-      }
-      const handles: Record<HandleDir, HTMLSpanElement> = {} as Record<
-        HandleDir,
-        HTMLSpanElement
-      >
-      ;(['nw', 'ne', 'sw', 'se'] as const).forEach((dir) => {
-        const h = document.createElement('span')
-        h.className = `ante-image-resize-handle ante-image-resize-${dir}`
-        h.setAttribute('data-handle', dir)
-        h.setAttribute('title', HANDLE_LABELS[dir])
-        h.setAttribute('aria-label', HANDLE_LABELS[dir])
-        h.setAttribute('role', 'button')
-        handles[dir] = h
-      })
-
       frame.appendChild(img)
-      frame.appendChild(handles.nw)
-      frame.appendChild(handles.ne)
-      frame.appendChild(handles.sw)
-      frame.appendChild(handles.se)
 
       const caption = document.createElement('span')
       caption.className = 'ante-image-caption'
@@ -233,7 +208,6 @@ export const AnteImage = Image.extend({
         if (currentLayout !== 'float' || e.button !== 0) return
         const target = e.target as HTMLElement
         if (target.closest('.ante-image-caption')) return
-        if (target.closest('.ante-image-resize-handle')) return
         const startX = e.clientX
         const startY = e.clientY
         let dx = 0
@@ -296,83 +270,15 @@ export const AnteImage = Image.extend({
         }
       })
 
-      // Force NodeSelection on click so the handle reliably appears even if
-      // ProseMirror's default atom-node click handling misses (e.g. when the
-      // click lands on our inline caption instead of the img).
+      // Force NodeSelection on click so the floating overlay reliably
+      // anchors to this image even when the click lands on the caption
+      // area or ProseMirror's default atom-click handling misses.
       wrapper.addEventListener('mousedown', (e: MouseEvent) => {
         const target = e.target as HTMLElement
         if (target.closest('.ante-image-caption')) return
-        if (target.closest('.ante-image-resize-handle')) return
         const pos = typeof getPos === 'function' ? getPos() : undefined
         if (pos === undefined) return
-        console.debug('[AnteImage] select', { pos })
         editor.chain().setNodeSelection(pos).run()
-      })
-
-      const startResize = (e: MouseEvent, dir: HandleDir) => {
-        if (e.button !== 0) return
-        e.preventDefault()
-        e.stopPropagation()
-        console.debug('[AnteImage] resize:start', { dir, client: [e.clientX, e.clientY] })
-
-        const growsWithDx = dir === 'ne' || dir === 'se'
-        const startX = e.clientX
-        const startWidth = img.offsetWidth || img.naturalWidth || 100
-        const startHeight = img.offsetHeight || img.naturalHeight || 100
-        const aspect = startHeight > 0 ? startWidth / startHeight : 1
-        let moved = false
-
-        const onMove = (ev: MouseEvent) => {
-          const rawDx = ev.clientX - startX
-          const dx = growsWithDx ? rawDx : -rawDx
-          if (!moved && Math.abs(rawDx) > 2) {
-            moved = true
-            isDragging = true
-            dispatchDrag('start')
-          }
-          if (!moved) return
-          const w = Math.max(MIN_IMAGE_WIDTH, Math.round(startWidth + dx))
-          img.style.width = `${w}px`
-          img.style.height = `${Math.round(w / aspect)}px`
-          img.style.maxWidth = 'none'
-          wrapper.style.maxWidth = 'none'
-        }
-
-        const onUp = () => {
-          window.removeEventListener('mousemove', onMove)
-          window.removeEventListener('mouseup', onUp)
-          activeDragCleanup = null
-          if (!moved) {
-            isDragging = false
-            console.debug('[AnteImage] resize:cancel (no-move)', { dir })
-            return
-          }
-          const newWidth = img.offsetWidth
-          currentWidth = newWidth
-          img.style.height = 'auto'
-          isDragging = false
-          dispatchDrag('end')
-          console.debug('[AnteImage] resize:end', { dir, newWidth })
-          const pos = typeof getPos === 'function' ? getPos() : undefined
-          if (pos !== undefined) {
-            editor
-              .chain()
-              .setNodeSelection(pos)
-              .updateAttributes('image', { width: newWidth })
-              .run()
-          }
-        }
-
-        window.addEventListener('mousemove', onMove)
-        window.addEventListener('mouseup', onUp)
-        activeDragCleanup = () => {
-          window.removeEventListener('mousemove', onMove)
-          window.removeEventListener('mouseup', onUp)
-        }
-      }
-
-      ;(['nw', 'ne', 'sw', 'se'] as const).forEach((dir) => {
-        handles[dir].addEventListener('mousedown', (e) => startResize(e, dir))
       })
 
       applyLayout(
@@ -421,8 +327,7 @@ export const AnteImage = Image.extend({
         stopEvent(event) {
           if (
             event.target instanceof HTMLElement &&
-            (event.target.closest('.ante-image-caption') ||
-              event.target.closest('.ante-image-resize-handle'))
+            event.target.closest('.ante-image-caption')
           ) {
             return true
           }

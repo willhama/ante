@@ -14,6 +14,7 @@
   import { PaginationExtension } from './PaginationPlugin';
   import { GhostCompletion } from './GhostCompletion';
   import { AnteImage, ANTE_IMAGE_DRAG_EVENT, MIN_IMAGE_WIDTH } from './AnteImage';
+  import ImageResizeOverlay from './ImageResizeOverlay.svelte';
   import { appState } from '$lib/state/app-state.svelte';
 
   interface Props {
@@ -222,6 +223,7 @@
   </div>
 {/if}
 <div class="editor-container" bind:this={container}></div>
+<ImageResizeOverlay {editor} />
 
 <style>
   .image-bubble-menu {
@@ -408,59 +410,6 @@
     position: relative;
     display: inline-block;
     line-height: 0;
-  }
-
-  .editor-container :global(.tiptap .ante-image-selected .ante-image-frame) {
-    outline: 2px solid var(--primary, oklch(0.205 0 0));
-    outline-offset: 2px;
-    border-radius: 2px;
-  }
-
-  .editor-container :global(.tiptap .ante-image-resize-handle) {
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    background: #ef4444;
-    border: 2px solid #ffffff;
-    border-radius: 50%;
-    box-shadow: 0 1px 4px color-mix(in srgb, #000 50%, transparent);
-    display: none;
-    z-index: 10;
-    touch-action: none;
-    pointer-events: auto;
-  }
-
-  .editor-container :global(.tiptap .ante-image-resize-handle:hover) {
-    background: #dc2626;
-  }
-
-  .editor-container :global(.tiptap .ante-image-resize-nw) {
-    top: 0;
-    left: 0;
-    transform: translate(-50%, -50%);
-    cursor: nwse-resize;
-  }
-  .editor-container :global(.tiptap .ante-image-resize-ne) {
-    top: 0;
-    right: 0;
-    transform: translate(50%, -50%);
-    cursor: nesw-resize;
-  }
-  .editor-container :global(.tiptap .ante-image-resize-sw) {
-    bottom: 0;
-    left: 0;
-    transform: translate(-50%, 50%);
-    cursor: nesw-resize;
-  }
-  .editor-container :global(.tiptap .ante-image-resize-se) {
-    bottom: 0;
-    right: 0;
-    transform: translate(50%, 50%);
-    cursor: nwse-resize;
-  }
-
-  .editor-container :global(.tiptap .ante-image-selected .ante-image-resize-handle) {
-    display: block;
   }
 
   .editor-container :global(.tiptap .ante-image-caption) {
