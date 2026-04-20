@@ -16,9 +16,18 @@
     cache: Map<string, DirEntry[]>;
     loading: Set<string>;
     onOpenFile: (path: string) => void;
+    onCreateInFolder: (folderPath: string) => void;
   }
 
-  const { entry, depth, expanded, cache, loading, onOpenFile }: Props = $props();
+  const {
+    entry,
+    depth,
+    expanded,
+    cache,
+    loading,
+    onOpenFile,
+    onCreateInFolder,
+  }: Props = $props();
 
   const OPENABLE_EXTS = new Set([
     'html', 'htm', 'txt', 'md', 'markdown', 'rst', 'log',
@@ -105,9 +114,7 @@
   {#if isLoading && !children}
     <div class="loading" style="padding-left: {8 + (depth + 1) * 14 + 12}px">Loading…</div>
   {:else if children}
-    {#if children.length === 0}
-      <div class="empty-child" style="padding-left: {8 + (depth + 1) * 14 + 12}px">empty</div>
-    {:else}
+    {#if children.length > 0}
       {#each children as child (child.path)}
         <Self
           entry={child}
@@ -116,9 +123,23 @@
           {cache}
           {loading}
           {onOpenFile}
+          {onCreateInFolder}
         />
       {/each}
     {/if}
+    <button
+      type="button"
+      class="add-row"
+      style="padding-left: {8 + (depth + 1) * 14 + 12 + 6}px"
+      onclick={() => onCreateInFolder(entry.path)}
+      title="Add document to {entry.name}"
+    >
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+      <span>New document</span>
+    </button>
   {/if}
 {/if}
 
@@ -190,11 +211,29 @@
     white-space: nowrap;
   }
 
-  .loading,
-  .empty-child {
+  .loading {
     font-size: 12px;
     color: var(--muted-foreground, #6b7280);
     padding-top: 2px;
     padding-bottom: 4px;
+  }
+
+  .add-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 3px 12px;
+    border: none;
+    background: transparent;
+    color: var(--muted-foreground, #6b7280);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .add-row:hover {
+    background: var(--accent, rgba(0, 0, 0, 0.06));
+    color: var(--foreground, #111);
   }
 </style>

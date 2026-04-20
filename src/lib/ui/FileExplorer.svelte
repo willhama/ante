@@ -94,20 +94,31 @@
     }
   });
 
-  async function createDocument(): Promise<void> {
-    if (!rootPath) return;
+  async function createDocumentIn(dir: string): Promise<void> {
+    if (!dir) return;
     try {
-      const result = await invoke<{ path: string }>('create_document', {
-        dir: rootPath,
-      });
+      const result = await invoke<{ path: string }>('create_document', { dir });
       onOpenFile(result.path);
-      // The new file lives in the same root; the file-change effect won't
-      // refresh because parentDir is unchanged. Force a re-read so it appears.
-      cache.delete(rootPath);
-      await refreshRoot(result.path);
+      if (dir === rootPath) {
+        cache.delete(rootPath);
+        await refreshRoot(result.path);
+      } else {
+        // Refresh just this folder's cached children + ensure it's expanded.
+        try {
+          const children = await invoke<DirEntry[]>('list_directory', { path: dir });
+          cache.set(dir, children);
+          expanded.set(dir, true);
+        } catch {
+          // Ignore - the parent dir reload below will still surface the file.
+        }
+      }
     } catch (e) {
       errorMsg = e instanceof Error ? e.message : 'Failed to create document';
     }
+  }
+
+  function createDocumentInRoot(): Promise<void> {
+    return createDocumentIn(rootPath);
   }
 </script>
 
@@ -116,19 +127,6 @@
     <span class="header-title" title={rootPath}>
       {rootPath ? basename(rootPath) || rootPath : 'No folder'}
     </span>
-    <button
-      type="button"
-      class="icon-btn"
-      title="New document in this folder"
-      onclick={createDocument}
-      disabled={!rootPath}
-      aria-label="New document"
-    >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="12" y1="5" x2="12" y2="19"></line>
-        <line x1="5" y1="12" x2="19" y2="12"></line>
-      </svg>
-    </button>
     <button
       type="button"
       class="icon-btn"
@@ -167,8 +165,21 @@
             {cache}
             loading={loadingSet}
             {onOpenFile}
+            onCreateInFolder={createDocumentIn}
           />
         {/each}
+        <button
+          type="button"
+          class="root-add-row"
+          onclick={createDocumentInRoot}
+          title="Add document to {basename(rootPath) || rootPath}"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          <span>New document</span>
+        </button>
       </div>
     {/if}
   </div>
@@ -239,6 +250,26 @@
 
   .tree {
     padding: 4px 0;
+  }
+
+  .root-add-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 12px 5px 26px;
+    border: none;
+    background: transparent;
+    color: var(--muted-foreground, #6b7280);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    margin-top: 2px;
+  }
+
+  .root-add-row:hover {
+    background: var(--accent, rgba(0, 0, 0, 0.06));
+    color: var(--foreground, #111);
   }
 
   .empty {
