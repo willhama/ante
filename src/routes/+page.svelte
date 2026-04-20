@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import type { Editor } from '@tiptap/core';
   import { invoke } from '@tauri-apps/api/core';
   import EditorComponent from '$lib/editor/Editor.svelte';
@@ -9,6 +9,7 @@
   import SettingsDialog from '$lib/ui/SettingsDialog.svelte';
   import AiSetupBanner from '$lib/ui/AiSetupBanner.svelte';
   import FileExplorer from '$lib/ui/FileExplorer.svelte';
+  import WelcomeScreen from '$lib/ui/WelcomeScreen.svelte';
   import { appState } from '$lib/state/app-state.svelte';
   import {
     openFile,
@@ -21,11 +22,12 @@
     type EditorBridge,
   } from '$lib/state/file-ops';
 
-  let editorComponent: EditorComponent;
+  let editorComponent = $state<EditorComponent | undefined>(undefined);
   let toolbar: Toolbar;
   let editor = $state<Editor | undefined>(undefined);
   let contentHeight = $state(0);
   let pageBreaks = $state<number[]>([]);
+  let showWelcome = $state(true);
 
   function handleContentHeightChange(height: number): void {
     contentHeight = height;
@@ -70,20 +72,42 @@
   }
 
   async function handleNew(): Promise<void> {
-    await newFile(getBridge());
+    const wasWelcome = showWelcome;
+    showWelcome = false;
+    await tick();
+    const created = await newFile(getBridge());
+    if (!created && wasWelcome) {
+      showWelcome = true;
+      return;
+    }
+    editor = editorComponent?.getEditor();
+    toolbar?.bumpTick();
     updateCounts();
   }
 
   async function handleOpen(): Promise<void> {
+    const wasWelcome = showWelcome;
+    showWelcome = false;
+    await tick();
     await openFile(getBridge());
-    // After opening, update editor reference and counts
+    if (!appState.filePath && wasWelcome) {
+      showWelcome = true;
+      return;
+    }
     editor = editorComponent?.getEditor();
     toolbar?.bumpTick();
     updateCounts();
   }
 
   async function handleOpenFromSidebar(path: string): Promise<void> {
+    const wasWelcome = showWelcome;
+    showWelcome = false;
+    await tick();
     await openPath(path, getBridge());
+    if (!appState.filePath && wasWelcome) {
+      showWelcome = true;
+      return;
+    }
     editor = editorComponent?.getEditor();
     toolbar?.bumpTick();
     updateCounts();
@@ -251,16 +275,24 @@
     {#if appState.sidebarOpen}
       <FileExplorer onOpenFile={handleOpenFromSidebar} />
     {/if}
-    <PageStack {contentHeight} {pageBreaks}>
-      <EditorComponent
-        bind:this={editorComponent}
-        content=""
-        onContentChange={handleContentChange}
-        onSelectionUpdate={handleSelectionUpdate}
-        onContentHeightChange={handleContentHeightChange}
-        onPageBreaksChange={handlePageBreaksChange}
+    {#if showWelcome}
+      <WelcomeScreen
+        onNew={handleNew}
+        onOpen={handleOpen}
+        onOpenPath={handleOpenFromSidebar}
       />
-    </PageStack>
+    {:else}
+      <PageStack {contentHeight} {pageBreaks}>
+        <EditorComponent
+          bind:this={editorComponent}
+          content=""
+          onContentChange={handleContentChange}
+          onSelectionUpdate={handleSelectionUpdate}
+          onContentHeightChange={handleContentHeightChange}
+          onPageBreaksChange={handlePageBreaksChange}
+        />
+      </PageStack>
+    {/if}
   </div>
   <StatusBar />
   <SettingsDialog />
