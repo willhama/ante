@@ -63,6 +63,10 @@ const DEFAULT_MAX_TOKENS: u32 = 80;
 const DEFAULT_TRIGGER_SPEED: &str = "balanced";
 const TEMPERATURE: f32 = 0.3;
 
+fn is_valid_trigger_speed(s: &str) -> bool {
+    matches!(s, "eager" | "quick" | "balanced")
+}
+
 /// Returns a boxed provider client for the given provider.
 pub fn client_for(provider: Provider) -> Box<dyn ProviderClient> {
     match provider {
@@ -393,7 +397,7 @@ fn get_config(app: &AppHandle) -> ResolvedConfig {
             let trigger_speed = store
                 .get(KEY_TRIGGER_SPEED)
                 .and_then(|v| v.as_str().map(|s| s.to_string()))
-                .filter(|s| matches!(s.as_str(), "eager" | "balanced" | "relaxed"))
+                .filter(|s| is_valid_trigger_speed(s.as_str()))
                 .unwrap_or_else(|| DEFAULT_TRIGGER_SPEED.to_string());
 
             let (model, base_url, max_tokens) = read_provider_slot(&store, active);
@@ -698,7 +702,7 @@ pub fn load_ai_config(app: AppHandle) -> AiConfigMeta {
         store
             .get(KEY_TRIGGER_SPEED)
             .and_then(|v| v.as_str().map(|s| s.to_string()))
-            .filter(|s| matches!(s.as_str(), "eager" | "balanced" | "relaxed"))
+            .filter(|s| is_valid_trigger_speed(s.as_str()))
             .unwrap_or_else(|| DEFAULT_TRIGGER_SPEED.to_string())
     } else {
         DEFAULT_TRIGGER_SPEED.to_string()
@@ -755,7 +759,7 @@ pub fn save_ai_config(
     }
 
     if let Some(speed) = payload.trigger_speed.as_deref() {
-        if matches!(speed, "eager" | "balanced" | "relaxed") {
+        if is_valid_trigger_speed(speed) {
             store.set(KEY_TRIGGER_SPEED, serde_json::Value::String(speed.to_string()));
         }
     }
