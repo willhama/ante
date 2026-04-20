@@ -93,6 +93,22 @@
       refreshRoot(appState.filePath);
     }
   });
+
+  async function createDocument(): Promise<void> {
+    if (!rootPath) return;
+    try {
+      const result = await invoke<{ path: string }>('create_document', {
+        dir: rootPath,
+      });
+      onOpenFile(result.path);
+      // The new file lives in the same root; the file-change effect won't
+      // refresh because parentDir is unchanged. Force a re-read so it appears.
+      cache.delete(rootPath);
+      await refreshRoot(result.path);
+    } catch (e) {
+      errorMsg = e instanceof Error ? e.message : 'Failed to create document';
+    }
+  }
 </script>
 
 <aside class="file-explorer" style="width: {appState.sidebarWidth}px">
@@ -100,6 +116,19 @@
     <span class="header-title" title={rootPath}>
       {rootPath ? basename(rootPath) || rootPath : 'No folder'}
     </span>
+    <button
+      type="button"
+      class="icon-btn"
+      title="New document in this folder"
+      onclick={createDocument}
+      disabled={!rootPath}
+      aria-label="New document"
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <line x1="5" y1="12" x2="19" y2="12"></line>
+      </svg>
+    </button>
     <button
       type="button"
       class="icon-btn"

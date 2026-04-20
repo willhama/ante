@@ -74,6 +74,39 @@ pub async fn list_directory(path: String) -> Result<Vec<DirEntryInfo>, AnteError
     Ok(entries)
 }
 
+/// Create a new empty `.html` document in the given directory and return the
+/// chosen path. If "Untitled.html" already exists, increments the suffix
+/// ("Untitled 2.html", "Untitled 3.html", ...) until a free name is found.
+/// Writes a minimal empty body so the file appears immediately in directory
+/// listings.
+#[tauri::command]
+pub async fn create_document(dir: String) -> Result<SaveAsResult, AnteError> {
+    let dir_path = std::path::Path::new(&dir);
+    if !dir_path.is_dir() {
+        return Err(AnteError::Io(format!("not a directory: {}", dir)));
+    }
+    let mut chosen: Option<std::path::PathBuf> = None;
+    for n in 0..1000 {
+        let name = if n == 0 {
+            "Untitled.html".to_string()
+        } else {
+            format!("Untitled {}.html", n + 1)
+        };
+        let candidate = dir_path.join(&name);
+        if !candidate.exists() {
+            chosen = Some(candidate);
+            break;
+        }
+    }
+    let path = chosen.ok_or_else(|| {
+        AnteError::Io("could not find a free Untitled name".to_string())
+    })?;
+    tokio::fs::write(&path, b"").await?;
+    Ok(SaveAsResult {
+        path: path.to_string_lossy().to_string(),
+    })
+}
+
 /// Reads a file at the given path. Used by the sidebar to open a file the user
 /// clicked, bypassing the native picker dialog. Same size + UTF-8 + binary
 /// guards as `open_file`.

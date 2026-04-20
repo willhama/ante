@@ -13,6 +13,7 @@ pub fn run() {
             commands::open_file,
             commands::read_file,
             commands::list_directory,
+            commands::create_document,
             commands::save_file,
             commands::save_file_as,
             ai::stream_completion,
