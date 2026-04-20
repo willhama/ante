@@ -14,6 +14,7 @@ pub fn run() {
             commands::read_file,
             commands::list_directory,
             commands::create_document,
+            commands::move_path,
             commands::save_file,
             commands::save_file_as,
             ai::stream_completion,

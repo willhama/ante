@@ -17,6 +17,7 @@
     loading: Set<string>;
     onOpenFile: (path: string) => void;
     onCreateInFolder: (folderPath: string) => void;
+    onMoveFile: (src: string, dstDir: string) => void;
   }
 
   const {
@@ -27,7 +28,39 @@
     loading,
     onOpenFile,
     onCreateInFolder,
+    onMoveFile,
   }: Props = $props();
+
+  let dragOver = $state(false);
+
+  function handleDragStart(e: DragEvent): void {
+    if (entry.is_dir) return;
+    if (!e.dataTransfer) return;
+    e.dataTransfer.setData('application/x-ante-path', entry.path);
+    e.dataTransfer.effectAllowed = 'move';
+  }
+
+  function handleDragOver(e: DragEvent): void {
+    if (!entry.is_dir) return;
+    if (!e.dataTransfer?.types.includes('application/x-ante-path')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    dragOver = true;
+  }
+
+  function handleDragLeave(): void {
+    dragOver = false;
+  }
+
+  function handleDrop(e: DragEvent): void {
+    if (!entry.is_dir) return;
+    const src = e.dataTransfer?.getData('application/x-ante-path');
+    dragOver = false;
+    if (!src) return;
+    e.preventDefault();
+    if (src === entry.path) return;
+    onMoveFile(src, entry.path);
+  }
 
   const OPENABLE_EXTS = new Set([
     'html', 'htm', 'txt', 'md', 'markdown', 'rst', 'log',
@@ -82,8 +115,14 @@
   class="row"
   class:active={isActive}
   class:dir={entry.is_dir}
+  class:drop-target={dragOver}
   style="padding-left: {8 + depth * 14}px"
+  draggable={!entry.is_dir}
   onclick={handleClick}
+  ondragstart={handleDragStart}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleDrop}
   title={entry.path}
 >
   {#if entry.is_dir}
@@ -124,6 +163,7 @@
           {loading}
           {onOpenFile}
           {onCreateInFolder}
+          {onMoveFile}
         />
       {/each}
     {/if}
@@ -171,6 +211,12 @@
 
   .row.dir {
     color: var(--foreground, #111);
+  }
+
+  .row.drop-target {
+    background: color-mix(in srgb, var(--primary, #6366f1) 18%, transparent);
+    outline: 1px dashed var(--primary, #6366f1);
+    outline-offset: -2px;
   }
 
   .chevron {

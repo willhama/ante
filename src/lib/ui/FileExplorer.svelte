@@ -120,6 +120,40 @@
   function createDocumentInRoot(): Promise<void> {
     return createDocumentIn(rootPath);
   }
+
+  async function moveFile(src: string, dstDir: string): Promise<void> {
+    if (!src || !dstDir) return;
+    const srcParent = parentDir(src);
+    if (srcParent === dstDir) return;
+    try {
+      const result = await invoke<{ path: string }>('move_path', {
+        src,
+        dstDir,
+      });
+      const newPath = result.path;
+      // Refresh both ends of the move so they reflect on screen.
+      const dirsToRefresh = new Set<string>([srcParent, dstDir]);
+      for (const dir of dirsToRefresh) {
+        try {
+          const children = await invoke<DirEntry[]>('list_directory', { path: dir });
+          cache.set(dir, children);
+          if (dir === rootPath) {
+            rootEntries = children;
+          }
+        } catch {
+          cache.delete(dir);
+        }
+      }
+      // Auto-expand the destination so the user sees where the file landed.
+      expanded.set(dstDir, true);
+      // If the moved file was the active document, keep it open under its new path.
+      if (appState.filePath === src) {
+        appState.filePath = newPath;
+      }
+    } catch (e) {
+      errorMsg = e instanceof Error ? e.message : 'Failed to move file';
+    }
+  }
 </script>
 
 <aside class="file-explorer" style="width: {appState.sidebarWidth}px">
@@ -166,6 +200,7 @@
             loading={loadingSet}
             {onOpenFile}
             onCreateInFolder={createDocumentIn}
+            onMoveFile={moveFile}
           />
         {/each}
         <button

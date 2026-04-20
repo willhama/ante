@@ -107,6 +107,46 @@ pub async fn create_document(dir: String) -> Result<SaveAsResult, AnteError> {
     })
 }
 
+/// Move a file into a destination directory. Preserves the source filename.
+/// Refuses to overwrite an existing target. Tries `rename` first and falls
+/// back to copy + remove if the rename hits a cross-device boundary.
+#[tauri::command]
+pub async fn move_path(src: String, dst_dir: String) -> Result<SaveAsResult, AnteError> {
+    let src_path = std::path::Path::new(&src);
+    let dst_dir_path = std::path::Path::new(&dst_dir);
+    if !src_path.exists() {
+        return Err(AnteError::Io(format!("source does not exist: {}", src)));
+    }
+    if !dst_dir_path.is_dir() {
+        return Err(AnteError::Io(format!(
+            "destination is not a directory: {}",
+            dst_dir
+        )));
+    }
+    let name = src_path
+        .file_name()
+        .ok_or_else(|| AnteError::Io("source has no filename".to_string()))?;
+    let new_path = dst_dir_path.join(name);
+    if new_path == src_path {
+        return Ok(SaveAsResult {
+            path: new_path.to_string_lossy().to_string(),
+        });
+    }
+    if new_path.exists() {
+        return Err(AnteError::Io(format!(
+            "target already exists: {}",
+            new_path.display()
+        )));
+    }
+    if tokio::fs::rename(src_path, &new_path).await.is_err() {
+        tokio::fs::copy(src_path, &new_path).await?;
+        tokio::fs::remove_file(src_path).await?;
+    }
+    Ok(SaveAsResult {
+        path: new_path.to_string_lossy().to_string(),
+    })
+}
+
 /// Reads a file at the given path. Used by the sidebar to open a file the user
 /// clicked, bypassing the native picker dialog. Same size + UTF-8 + binary
 /// guards as `open_file`.
