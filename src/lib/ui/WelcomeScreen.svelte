@@ -21,10 +21,12 @@
 
 <div class="welcome" class:dark={appState.resolvedTheme === 'dark'}>
   <div class="welcome-inner">
-    <h1 class="title">ante</h1>
-    <p class="tagline">A calm place to write.</p>
+    <header class="header">
+      <h1 class="title">ante</h1>
+      <p class="tagline">A calm place to write.</p>
+    </header>
 
-    <section class="column">
+    <section class="column framed">
       <h2 class="section-label">Start</h2>
       <button class="row action" onclick={onNew}>
         <span class="label">New file</span>
@@ -85,48 +87,61 @@
 
   .welcome-inner {
     width: 100%;
-    max-width: 520px;
+    max-width: 440px;
     display: flex;
     flex-direction: column;
-    gap: 28px;
+    gap: 20px;
+  }
+
+  .header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
   }
 
   .title {
     font-family: 'Inter Variable', system-ui, sans-serif;
-    font-size: 44px;
-    font-weight: 300;
-    letter-spacing: -0.02em;
+    font-size: 20px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
     margin: 0;
     line-height: 1;
   }
 
   .tagline {
-    margin: -16px 0 0;
-    font-size: 14px;
-    opacity: 0.55;
+    margin: 0;
+    font-size: 12px;
+    opacity: 0.5;
   }
 
   .column {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
+  }
+
+  .column.framed {
+    border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+    border-radius: 8px;
+    padding: 10px 12px 12px;
+    gap: 2px;
   }
 
   .section-label {
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     opacity: 0.5;
-    margin: 0 0 6px;
+    margin: 0 0 4px;
   }
 
   .row {
     display: flex;
     align-items: baseline;
     gap: 10px;
-    padding: 8px 10px;
-    border-radius: 6px;
+    padding: 6px 8px;
+    border-radius: 5px;
     background: transparent;
     border: none;
     color: inherit;
@@ -144,7 +159,7 @@
   }
 
   .row.action .label {
-    font-size: 15px;
+    font-size: 13px;
   }
 
   .row.recent {
@@ -152,16 +167,16 @@
   }
 
   .label {
-    font-size: 14px;
+    font-size: 13px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     flex-shrink: 0;
-    max-width: 240px;
+    max-width: 220px;
   }
 
   .dir {
-    font-size: 12px;
+    font-size: 11px;
     opacity: 0.5;
     white-space: nowrap;
     overflow: hidden;
@@ -173,28 +188,28 @@
 
   .shortcut {
     margin-left: auto;
-    font-size: 12px;
+    font-size: 11px;
     opacity: 0.45;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.04em;
   }
 
   .empty {
-    font-size: 13px;
+    font-size: 12px;
     opacity: 0.5;
-    margin: 4px 10px;
+    margin: 2px 8px;
   }
 
   .remove {
     margin-left: 8px;
     opacity: 0;
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border-radius: 3px;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1;
     cursor: pointer;
     flex-shrink: 0;
