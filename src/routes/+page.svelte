@@ -227,6 +227,7 @@
     onNew={handleNew}
     onOpen={handleOpen}
     onSave={handleSave}
+    onSaveAs={() => saveFileAs(getBridge())}
     onToggleAi={toggleAi}
   />
   <PageStack {contentHeight} {pageBreaks}>

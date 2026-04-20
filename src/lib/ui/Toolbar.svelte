@@ -9,10 +9,11 @@
     onNew?: () => void;
     onOpen?: () => void;
     onSave?: () => void;
+    onSaveAs?: () => void;
     onToggleAi?: () => void;
   }
 
-  let { editor, onNew, onOpen, onSave, onToggleAi }: Props = $props();
+  let { editor, onNew, onOpen, onSave, onSaveAs, onToggleAi }: Props = $props();
 
   function setPageSize(e: Event): void {
     appState.pageSize = (e.target as HTMLSelectElement).value as PageSize;
@@ -175,6 +176,19 @@
         <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
         <polyline points="17 21 17 13 7 13 7 21"></polyline>
         <polyline points="7 3 7 8 15 8"></polyline>
+      </svg>
+    </button>
+    <button
+      class="toolbar-btn"
+      title="Save As... (Cmd+Shift+S)"
+      onclick={onSaveAs}
+      aria-label="Save As"
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h10l4 4v5"></path>
+        <polyline points="14 21 14 13 7 13 7 18"></polyline>
+        <polyline points="7 3 7 8 13 8"></polyline>
+        <path d="M18.5 14.5l3 3-4 4h-3v-3z"></path>
       </svg>
     </button>
   </div>
