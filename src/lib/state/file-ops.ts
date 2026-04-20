@@ -3,6 +3,7 @@ import { message } from '@tauri-apps/plugin-dialog';
 import type { FilePayload, SaveAsResult, AnteError } from '$lib/types';
 import { ERROR_MESSAGES } from '$lib/types';
 import { appState } from './app-state.svelte';
+import { recentFiles } from './recent-files.svelte';
 
 /** Snapshot of the document at last save, used for dirty detection. */
 let savedSnapshot = '';
@@ -118,6 +119,7 @@ export async function openFile(bridge: EditorBridge): Promise<void> {
     // directly from their input handlers.
     savedSnapshot = stripped;
     appState.isDirty = false;
+    recentFiles.add(result.path);
 
     bridge.setHTML(stripped);
   } catch (err) {
@@ -148,6 +150,7 @@ export async function openPath(path: string, bridge: EditorBridge): Promise<void
     appState.footerText = footer;
     savedSnapshot = stripped;
     appState.isDirty = false;
+    recentFiles.add(result.path);
 
     bridge.setHTML(stripped);
   } catch (err) {
@@ -203,6 +206,7 @@ export async function saveFileAs(bridge: EditorBridge): Promise<void> {
     appState.filePath = result.path;
     savedSnapshot = editorHtml;
     appState.isDirty = false;
+    recentFiles.add(result.path);
   } catch (err) {
     await showError(err);
   }
