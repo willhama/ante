@@ -429,18 +429,14 @@ export const AnteImage = Image.extend({
           return isDragging
         },
         ignoreMutation(mutation) {
-          if (
-            mutation.target instanceof HTMLElement &&
-            mutation.target.closest('.ante-image-caption')
-          ) {
-            return true
-          }
-          if (
-            mutation.target instanceof Text &&
-            mutation.target.parentElement?.closest('.ante-image-caption')
-          ) {
-            return true
-          }
+          // Atom node - we fully own the DOM inside the wrapper. Any
+          // mutation (style changes during resize, class toggles on select,
+          // caption edits) must not trigger a PM re-render, otherwise the
+          // node view is destroyed mid-drag and the window listeners torn
+          // down by destroy() stop firing.
+          const target = mutation.target
+          if (target === wrapper) return true
+          if (target instanceof Node && wrapper.contains(target)) return true
           return false
         },
       }
