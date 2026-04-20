@@ -202,7 +202,7 @@
     style="left:{imageMenuX}px;top:{imageMenuY}px;"
   >
     <button class="bubble-btn" title="Inline" aria-label="Set image layout to inline" onmousedown={(e) => { e.preventDefault(); setImageLayout('inline'); }}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="5" x2="21" y2="5"/><rect x="6" y="9" width="12" height="7" rx="1"/><line x1="3" y1="19" x2="21" y2="19"/></svg>
     </button>
     <button class="bubble-btn" title="Wrap left" aria-label="Wrap text around image on the left" onmousedown={(e) => { e.preventDefault(); setImageLayout('wrap-left'); }}>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2" y="4" width="8" height="8" rx="1"/><line x1="13" y1="6" x2="22" y2="6"/><line x1="13" y1="10" x2="22" y2="10"/><line x1="2" y1="16" x2="22" y2="16"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
@@ -211,7 +211,7 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="14" y="4" width="8" height="8" rx="1"/><line x1="2" y1="6" x2="11" y2="6"/><line x1="2" y1="10" x2="11" y2="10"/><line x1="2" y1="16" x2="22" y2="16"/><line x1="2" y1="20" x2="22" y2="20"/></svg>
     </button>
     <button class="bubble-btn" title="Float (drag to reposition)" aria-label="Float image, drag to reposition" onmousedown={(e) => { e.preventDefault(); setImageLayout('float'); }}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/><path d="M6 2v4M18 2v4M2 6h4M2 18h4M20 6h2M20 18h2M6 20v2M18 20v2"/></svg>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18"/><path d="M3 12h18"/><path d="M9 6l3-3 3 3"/><path d="M9 18l3 3 3-3"/><path d="M6 9l-3 3 3 3"/><path d="M18 9l3 3-3 3"/></svg>
     </button>
     <span class="bubble-divider" aria-hidden="true"></span>
     <button class="bubble-btn" title="Shrink image" aria-label="Shrink image" onmousedown={(e) => { e.preventDefault(); adjustImageWidth(0.9); }}>
