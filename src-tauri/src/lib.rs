@@ -11,6 +11,8 @@ pub fn run() {
         .manage(ai::AiState::default())
         .invoke_handler(tauri::generate_handler![
             commands::open_file,
+            commands::read_file,
+            commands::list_directory,
             commands::save_file,
             commands::save_file_as,
             ai::stream_completion,

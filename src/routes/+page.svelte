@@ -8,9 +8,11 @@
   import StatusBar from '$lib/ui/StatusBar.svelte';
   import SettingsDialog from '$lib/ui/SettingsDialog.svelte';
   import AiSetupBanner from '$lib/ui/AiSetupBanner.svelte';
+  import FileExplorer from '$lib/ui/FileExplorer.svelte';
   import { appState } from '$lib/state/app-state.svelte';
   import {
     openFile,
+    openPath,
     saveFile,
     saveFileAs,
     newFile,
@@ -80,6 +82,13 @@
     updateCounts();
   }
 
+  async function handleOpenFromSidebar(path: string): Promise<void> {
+    await openPath(path, getBridge());
+    editor = editorComponent?.getEditor();
+    toolbar?.bumpTick();
+    updateCounts();
+  }
+
   async function handleSave(): Promise<void> {
     await saveFile(getBridge());
   }
@@ -141,6 +150,13 @@
       if (e.metaKey && e.key === ',') {
         e.preventDefault();
         appState.settingsOpen = true;
+        return;
+      }
+
+      // Cmd+B: Toggle file explorer sidebar
+      if (e.metaKey && !e.shiftKey && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault();
+        appState.sidebarOpen = !appState.sidebarOpen;
         return;
       }
     };
@@ -228,18 +244,24 @@
     onOpen={handleOpen}
     onSave={handleSave}
     onSaveAs={() => saveFileAs(getBridge())}
+    onToggleSidebar={() => (appState.sidebarOpen = !appState.sidebarOpen)}
     onToggleAi={toggleAi}
   />
-  <PageStack {contentHeight} {pageBreaks}>
-    <EditorComponent
-      bind:this={editorComponent}
-      content=""
-      onContentChange={handleContentChange}
-      onSelectionUpdate={handleSelectionUpdate}
-      onContentHeightChange={handleContentHeightChange}
-      onPageBreaksChange={handlePageBreaksChange}
-    />
-  </PageStack>
+  <div class="app-body">
+    {#if appState.sidebarOpen}
+      <FileExplorer onOpenFile={handleOpenFromSidebar} />
+    {/if}
+    <PageStack {contentHeight} {pageBreaks}>
+      <EditorComponent
+        bind:this={editorComponent}
+        content=""
+        onContentChange={handleContentChange}
+        onSelectionUpdate={handleSelectionUpdate}
+        onContentHeightChange={handleContentHeightChange}
+        onPageBreaksChange={handlePageBreaksChange}
+      />
+    </PageStack>
+  </div>
   <StatusBar />
   <SettingsDialog />
   <AiSetupBanner />
@@ -251,6 +273,14 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
+  }
+
+  .app-body {
+    flex: 1;
+    display: flex;
+    flex-direction: row;
+    min-height: 0;
     overflow: hidden;
   }
 </style>

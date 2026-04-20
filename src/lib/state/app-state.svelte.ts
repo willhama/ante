@@ -50,6 +50,12 @@ let totalPages = $state<number>(1);
 /** Whether the settings dialog is open. */
 let settingsOpen = $state<boolean>(false);
 
+/** Whether the file-explorer sidebar is visible. */
+let sidebarOpen = $state<boolean>(false);
+
+/** Pixel width of the file-explorer sidebar. */
+let sidebarWidth = $state<number>(240);
+
 /** Trigger speed for ghost autocomplete. Controls debounce + cooldown. */
 export type AiTriggerSpeed = 'eager' | 'balanced' | 'relaxed';
 let aiTriggerSpeed = $state<AiTriggerSpeed>('balanced');
@@ -172,6 +178,12 @@ export const appState = {
 
   get settingsOpen(): boolean { return settingsOpen; },
   set settingsOpen(v: boolean) { settingsOpen = v; },
+
+  get sidebarOpen(): boolean { return sidebarOpen; },
+  set sidebarOpen(v: boolean) { sidebarOpen = v; },
+
+  get sidebarWidth(): number { return sidebarWidth; },
+  set sidebarWidth(v: number) { sidebarWidth = Math.max(160, Math.min(480, v)); },
 
   get aiTriggerSpeed(): AiTriggerSpeed { return aiTriggerSpeed; },
   set aiTriggerSpeed(v: AiTriggerSpeed) { aiTriggerSpeed = v; },

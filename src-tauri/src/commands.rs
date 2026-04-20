@@ -19,6 +19,85 @@ pub struct SaveAsResult {
     pub path: String,
 }
 
+#[derive(Serialize)]
+pub struct DirEntryInfo {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+}
+
+/// Maximum number of entries returned from list_directory. Prevents pathological
+/// folder reads (node_modules, etc.) from flooding the renderer.
+const MAX_DIR_ENTRIES: usize = 500;
+
+/// List the immediate children of a directory. If `path` is a file, lists its
+/// parent directory instead. Skips dotfiles. Sorted: directories first, then
+/// files, alphabetical within each group. Capped at MAX_DIR_ENTRIES.
+#[tauri::command]
+pub async fn list_directory(path: String) -> Result<Vec<DirEntryInfo>, AnteError> {
+    let p = std::path::Path::new(&path);
+    let dir = if p.is_file() {
+        p.parent()
+            .ok_or_else(|| AnteError::Io("path has no parent".to_string()))?
+            .to_path_buf()
+    } else {
+        p.to_path_buf()
+    };
+
+    let mut entries: Vec<DirEntryInfo> = Vec::new();
+    let mut read = tokio::fs::read_dir(&dir).await?;
+    while let Some(entry) = read.next_entry().await? {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        let metadata = match entry.metadata().await {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        entries.push(DirEntryInfo {
+            name,
+            path: entry.path().to_string_lossy().to_string(),
+            is_dir: metadata.is_dir(),
+        });
+        if entries.len() >= MAX_DIR_ENTRIES {
+            break;
+        }
+    }
+
+    entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+    });
+
+    Ok(entries)
+}
+
+/// Reads a file at the given path. Used by the sidebar to open a file the user
+/// clicked, bypassing the native picker dialog. Same size + UTF-8 + binary
+/// guards as `open_file`.
+#[tauri::command]
+pub async fn read_file(path: String) -> Result<FilePayload, AnteError> {
+    let metadata = tokio::fs::metadata(&path).await?;
+    if metadata.len() > MAX_FILE_SIZE {
+        return Err(AnteError::FileTooLarge(format!(
+            "File is {} bytes (limit: {} bytes)",
+            metadata.len(),
+            MAX_FILE_SIZE
+        )));
+    }
+    let buf = tokio::fs::read(&path).await?;
+    if is_binary(&buf) {
+        return Err(AnteError::BinaryFile(format!(
+            "File appears to be binary: {}",
+            path
+        )));
+    }
+    let contents = validate_utf8(buf, &path)?;
+    Ok(FilePayload { path, contents })
+}
+
 /// Returns true if the buffer contains null bytes in the first BINARY_CHECK_LEN bytes.
 fn is_binary(buf: &[u8]) -> bool {
     let check_len = buf.len().min(BINARY_CHECK_LEN);
