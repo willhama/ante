@@ -418,19 +418,42 @@
 
   .editor-container :global(.tiptap .ante-image-resize-handle) {
     position: absolute;
-    bottom: -8px;
-    right: -8px;
-    width: 18px;
-    height: 18px;
-    background: var(--primary, oklch(0.205 0 0));
-    border: 2px solid var(--panel-bg, #fff);
-    border-radius: 3px;
-    box-shadow: 0 1px 3px color-mix(in srgb, var(--fg, #000) 35%, transparent);
-    cursor: nwse-resize;
+    width: 14px;
+    height: 14px;
+    background: #ef4444;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px color-mix(in srgb, #000 45%, transparent);
     display: none;
-    z-index: 3;
+    z-index: 5;
     touch-action: none;
     pointer-events: auto;
+  }
+
+  .editor-container :global(.tiptap .ante-image-resize-handle:hover) {
+    background: #dc2626;
+    transform: scale(1.15);
+  }
+
+  .editor-container :global(.tiptap .ante-image-resize-nw) {
+    top: -8px;
+    left: -8px;
+    cursor: nwse-resize;
+  }
+  .editor-container :global(.tiptap .ante-image-resize-ne) {
+    top: -8px;
+    right: -8px;
+    cursor: nesw-resize;
+  }
+  .editor-container :global(.tiptap .ante-image-resize-sw) {
+    bottom: -8px;
+    left: -8px;
+    cursor: nesw-resize;
+  }
+  .editor-container :global(.tiptap .ante-image-resize-se) {
+    bottom: -8px;
+    right: -8px;
+    cursor: nwse-resize;
   }
 
   .editor-container :global(.tiptap .ante-image-selected .ante-image-resize-handle) {

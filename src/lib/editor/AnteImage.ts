@@ -85,13 +85,32 @@ export const AnteImage = Image.extend({
       if (initNode.attrs.alt) img.alt = initNode.attrs.alt as string
       if (initNode.attrs.title) img.title = initNode.attrs.title as string
 
-      const handle = document.createElement('span')
-      handle.className = 'ante-image-resize-handle'
-      handle.setAttribute('aria-label', 'Resize image')
-      handle.setAttribute('role', 'button')
+      type HandleDir = 'nw' | 'ne' | 'sw' | 'se'
+      const HANDLE_LABELS: Record<HandleDir, string> = {
+        nw: 'Resize from top-left (NW)',
+        ne: 'Resize from top-right (NE)',
+        sw: 'Resize from bottom-left (SW)',
+        se: 'Resize from bottom-right (SE)',
+      }
+      const handles: Record<HandleDir, HTMLSpanElement> = {} as Record<
+        HandleDir,
+        HTMLSpanElement
+      >
+      ;(['nw', 'ne', 'sw', 'se'] as const).forEach((dir) => {
+        const h = document.createElement('span')
+        h.className = `ante-image-resize-handle ante-image-resize-${dir}`
+        h.setAttribute('data-handle', dir)
+        h.setAttribute('title', HANDLE_LABELS[dir])
+        h.setAttribute('aria-label', HANDLE_LABELS[dir])
+        h.setAttribute('role', 'button')
+        handles[dir] = h
+      })
 
       frame.appendChild(img)
-      frame.appendChild(handle)
+      frame.appendChild(handles.nw)
+      frame.appendChild(handles.ne)
+      frame.appendChild(handles.sw)
+      frame.appendChild(handles.se)
 
       const caption = document.createElement('span')
       caption.className = 'ante-image-caption'
@@ -279,16 +298,17 @@ export const AnteImage = Image.extend({
         if (target.closest('.ante-image-resize-handle')) return
         const pos = typeof getPos === 'function' ? getPos() : undefined
         if (pos === undefined) return
+        console.debug('[AnteImage] select', { pos })
         editor.chain().setNodeSelection(pos).run()
       })
 
-      // Resize handle drag (aspect-ratio locked). Window listeners so moves
-      // off the 18x18 handle still reach us.
-      handle.addEventListener('mousedown', (e: MouseEvent) => {
+      const startResize = (e: MouseEvent, dir: HandleDir) => {
         if (e.button !== 0) return
         e.preventDefault()
         e.stopPropagation()
+        console.debug('[AnteImage] resize:start', { dir, client: [e.clientX, e.clientY] })
 
+        const growsWithDx = dir === 'ne' || dir === 'se'
         const startX = e.clientX
         const startWidth = img.offsetWidth || img.naturalWidth || 100
         const startHeight = img.offsetHeight || img.naturalHeight || 100
@@ -296,8 +316,9 @@ export const AnteImage = Image.extend({
         let moved = false
 
         const onMove = (ev: MouseEvent) => {
-          const dx = ev.clientX - startX
-          if (!moved && Math.abs(dx) > 2) {
+          const rawDx = ev.clientX - startX
+          const dx = growsWithDx ? rawDx : -rawDx
+          if (!moved && Math.abs(rawDx) > 2) {
             moved = true
             isDragging = true
             dispatchDrag('start')
@@ -307,7 +328,6 @@ export const AnteImage = Image.extend({
           img.style.width = `${w}px`
           img.style.height = `${Math.round(w / aspect)}px`
           img.style.maxWidth = 'none'
-          // Keep wrapper's layout-imposed width cap from clipping the image.
           wrapper.style.maxWidth = 'none'
         }
 
@@ -317,6 +337,7 @@ export const AnteImage = Image.extend({
           activeDragCleanup = null
           if (!moved) {
             isDragging = false
+            console.debug('[AnteImage] resize:cancel (no-move)', { dir })
             return
           }
           const newWidth = img.offsetWidth
@@ -324,6 +345,7 @@ export const AnteImage = Image.extend({
           img.style.height = 'auto'
           isDragging = false
           dispatchDrag('end')
+          console.debug('[AnteImage] resize:end', { dir, newWidth })
           const pos = typeof getPos === 'function' ? getPos() : undefined
           if (pos !== undefined) {
             editor
@@ -340,6 +362,10 @@ export const AnteImage = Image.extend({
           window.removeEventListener('mousemove', onMove)
           window.removeEventListener('mouseup', onUp)
         }
+      }
+
+      ;(['nw', 'ne', 'sw', 'se'] as const).forEach((dir) => {
+        handles[dir].addEventListener('mousedown', (e) => startResize(e, dir))
       })
 
       applyLayout(
