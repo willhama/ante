@@ -19,6 +19,158 @@ pub struct SaveAsResult {
     pub path: String,
 }
 
+#[derive(Serialize)]
+pub struct DirEntryInfo {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+}
+
+/// Maximum number of entries returned from list_directory. Prevents pathological
+/// folder reads (node_modules, etc.) from flooding the renderer.
+const MAX_DIR_ENTRIES: usize = 500;
+
+/// List the immediate children of a directory. If `path` is a file, lists its
+/// parent directory instead. Skips dotfiles. Sorted: directories first, then
+/// files, alphabetical within each group. Capped at MAX_DIR_ENTRIES.
+#[tauri::command]
+pub async fn list_directory(path: String) -> Result<Vec<DirEntryInfo>, AnteError> {
+    let p = std::path::Path::new(&path);
+    let dir = if p.is_file() {
+        p.parent()
+            .ok_or_else(|| AnteError::Io("path has no parent".to_string()))?
+            .to_path_buf()
+    } else {
+        p.to_path_buf()
+    };
+
+    let mut entries: Vec<DirEntryInfo> = Vec::new();
+    let mut read = tokio::fs::read_dir(&dir).await?;
+    while let Some(entry) = read.next_entry().await? {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        let metadata = match entry.metadata().await {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        entries.push(DirEntryInfo {
+            name,
+            path: entry.path().to_string_lossy().to_string(),
+            is_dir: metadata.is_dir(),
+        });
+        if entries.len() >= MAX_DIR_ENTRIES {
+            break;
+        }
+    }
+
+    entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+    });
+
+    Ok(entries)
+}
+
+/// Create a new empty `.html` document in the given directory and return the
+/// chosen path. If "Untitled.html" already exists, increments the suffix
+/// ("Untitled 2.html", "Untitled 3.html", ...) until a free name is found.
+/// Writes a minimal empty body so the file appears immediately in directory
+/// listings.
+#[tauri::command]
+pub async fn create_document(dir: String) -> Result<SaveAsResult, AnteError> {
+    let dir_path = std::path::Path::new(&dir);
+    if !dir_path.is_dir() {
+        return Err(AnteError::Io(format!("not a directory: {}", dir)));
+    }
+    let mut chosen: Option<std::path::PathBuf> = None;
+    for n in 0..1000 {
+        let name = if n == 0 {
+            "Untitled.html".to_string()
+        } else {
+            format!("Untitled {}.html", n + 1)
+        };
+        let candidate = dir_path.join(&name);
+        if !candidate.exists() {
+            chosen = Some(candidate);
+            break;
+        }
+    }
+    let path = chosen.ok_or_else(|| {
+        AnteError::Io("could not find a free Untitled name".to_string())
+    })?;
+    tokio::fs::write(&path, b"").await?;
+    Ok(SaveAsResult {
+        path: path.to_string_lossy().to_string(),
+    })
+}
+
+/// Move a file into a destination directory. Preserves the source filename.
+/// Refuses to overwrite an existing target. Tries `rename` first and falls
+/// back to copy + remove if the rename hits a cross-device boundary.
+#[tauri::command]
+pub async fn move_path(src: String, dst_dir: String) -> Result<SaveAsResult, AnteError> {
+    let src_path = std::path::Path::new(&src);
+    let dst_dir_path = std::path::Path::new(&dst_dir);
+    if !src_path.exists() {
+        return Err(AnteError::Io(format!("source does not exist: {}", src)));
+    }
+    if !dst_dir_path.is_dir() {
+        return Err(AnteError::Io(format!(
+            "destination is not a directory: {}",
+            dst_dir
+        )));
+    }
+    let name = src_path
+        .file_name()
+        .ok_or_else(|| AnteError::Io("source has no filename".to_string()))?;
+    let new_path = dst_dir_path.join(name);
+    if new_path == src_path {
+        return Ok(SaveAsResult {
+            path: new_path.to_string_lossy().to_string(),
+        });
+    }
+    if new_path.exists() {
+        return Err(AnteError::Io(format!(
+            "target already exists: {}",
+            new_path.display()
+        )));
+    }
+    if tokio::fs::rename(src_path, &new_path).await.is_err() {
+        tokio::fs::copy(src_path, &new_path).await?;
+        tokio::fs::remove_file(src_path).await?;
+    }
+    Ok(SaveAsResult {
+        path: new_path.to_string_lossy().to_string(),
+    })
+}
+
+/// Reads a file at the given path. Used by the sidebar to open a file the user
+/// clicked, bypassing the native picker dialog. Same size + UTF-8 + binary
+/// guards as `open_file`.
+#[tauri::command]
+pub async fn read_file(path: String) -> Result<FilePayload, AnteError> {
+    let metadata = tokio::fs::metadata(&path).await?;
+    if metadata.len() > MAX_FILE_SIZE {
+        return Err(AnteError::FileTooLarge(format!(
+            "File is {} bytes (limit: {} bytes)",
+            metadata.len(),
+            MAX_FILE_SIZE
+        )));
+    }
+    let buf = tokio::fs::read(&path).await?;
+    if is_binary(&buf) {
+        return Err(AnteError::BinaryFile(format!(
+            "File appears to be binary: {}",
+            path
+        )));
+    }
+    let contents = validate_utf8(buf, &path)?;
+    Ok(FilePayload { path, contents })
+}
+
 /// Returns true if the buffer contains null bytes in the first BINARY_CHECK_LEN bytes.
 fn is_binary(buf: &[u8]) -> bool {
     let check_len = buf.len().min(BINARY_CHECK_LEN);

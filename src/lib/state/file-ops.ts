@@ -126,6 +126,36 @@ export async function openFile(bridge: EditorBridge): Promise<void> {
 }
 
 /**
+ * Open a file at a known path (no native dialog). Used by the sidebar.
+ * Prompts to save if the current document is dirty.
+ */
+export async function openPath(path: string, bridge: EditorBridge): Promise<void> {
+  if (appState.isDirty) {
+    const choice = await promptUnsavedChanges();
+    if (choice === 'cancel') return;
+    if (choice === 'save') {
+      await saveFile(bridge);
+      if (appState.isDirty) return;
+    }
+  }
+
+  try {
+    const result = await invoke<FilePayload>('read_file', { path });
+    const { header, footer, stripped } = parseHeaderFooter(result.contents);
+
+    appState.filePath = result.path;
+    appState.headerText = header;
+    appState.footerText = footer;
+    savedSnapshot = stripped;
+    appState.isDirty = false;
+
+    bridge.setHTML(stripped);
+  } catch (err) {
+    await showError(err);
+  }
+}
+
+/**
  * Save the current document to its existing path.
  * If no path exists (untitled), falls through to saveFileAs.
  */
