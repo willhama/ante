@@ -57,22 +57,32 @@ let sidebarOpen = $state<boolean>(false);
 let sidebarWidth = $state<number>(240);
 
 /** Trigger speed for ghost autocomplete. Controls debounce + cooldown. */
-export type AiTriggerSpeed = 'eager' | 'balanced' | 'relaxed';
+export type AiTriggerSpeed = 'eager' | 'quick' | 'balanced';
+export const AI_TRIGGER_SPEEDS: readonly AiTriggerSpeed[] = [
+  'eager',
+  'quick',
+  'balanced',
+] as const;
 let aiTriggerSpeed = $state<AiTriggerSpeed>('balanced');
 
 /** Max tokens per suggestion. Controls suggestion length. */
 let aiMaxTokens = $state<number>(80);
 
+// 300ms is the lower bound - anything faster hits provider rate limits.
 const TRIGGER_SPEED_DEBOUNCE: Record<AiTriggerSpeed, number> = {
   eager: 300,
+  quick: 500,
   balanced: 800,
-  relaxed: 1500,
 };
 const TRIGGER_SPEED_COOLDOWN: Record<AiTriggerSpeed, number> = {
   eager: 800,
+  quick: 1400,
   balanced: 2000,
-  relaxed: 3500,
 };
+
+export function isAiTriggerSpeed(v: unknown): v is AiTriggerSpeed {
+  return typeof v === 'string' && (AI_TRIGGER_SPEEDS as readonly string[]).includes(v);
+}
 const aiDebounceMs: number = $derived(TRIGGER_SPEED_DEBOUNCE[aiTriggerSpeed]);
 const aiCooldownMs: number = $derived(TRIGGER_SPEED_COOLDOWN[aiTriggerSpeed]);
 

@@ -10,7 +10,7 @@
   import AiSetupBanner from '$lib/ui/AiSetupBanner.svelte';
   import FileExplorer from '$lib/ui/FileExplorer.svelte';
   import WelcomeScreen from '$lib/ui/WelcomeScreen.svelte';
-  import { appState } from '$lib/state/app-state.svelte';
+  import { appState, isAiTriggerSpeed } from '$lib/state/app-state.svelte';
   import {
     openFile,
     openPath,
@@ -225,7 +225,7 @@
         if (activeSlot) {
           appState.aiMaxTokens = activeSlot.max_tokens;
         }
-        if (meta.trigger_speed === 'eager' || meta.trigger_speed === 'balanced' || meta.trigger_speed === 'relaxed') {
+        if (isAiTriggerSpeed(meta.trigger_speed)) {
           appState.aiTriggerSpeed = meta.trigger_speed;
         }
       } catch {

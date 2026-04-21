@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { openUrl } from '@tauri-apps/plugin-opener';
-  import { appState, type AiTriggerSpeed } from '$lib/state/app-state.svelte';
+  import { appState, type AiTriggerSpeed, isAiTriggerSpeed } from '$lib/state/app-state.svelte';
   import { Button, buttonVariants } from '$lib/components/ui/button/index.js';
   import * as Dialog from '$lib/components/ui/dialog/index.js';
   import { Input } from '$lib/components/ui/input/index.js';
@@ -243,12 +243,7 @@
       }
 
       suggestionLength = tokensToLength(providerForms[activeProvider].maxTokens);
-      triggerSpeed =
-        meta.trigger_speed === 'eager' ||
-        meta.trigger_speed === 'balanced' ||
-        meta.trigger_speed === 'relaxed'
-          ? meta.trigger_speed
-          : 'balanced';
+      triggerSpeed = isAiTriggerSpeed(meta.trigger_speed) ? meta.trigger_speed : 'balanced';
     } catch {
       // No store yet (dev browser).
     }
@@ -519,8 +514,8 @@
           <Label for="trigger-speed">Trigger speed</Label>
           <select id="trigger-speed" class={selectClass} bind:value={triggerSpeed}>
             <option value="eager">Eager (300ms)</option>
+            <option value="quick">Quick (500ms)</option>
             <option value="balanced">Balanced (800ms)</option>
-            <option value="relaxed">Relaxed (1.5s)</option>
           </select>
         </div>
       </div>
