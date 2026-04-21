@@ -30,6 +30,8 @@
     "@tiptap/pm": "^3.22.3",
     "@tiptap/starter-kit": "^3.22.3",
     "clsx": "^2.1.1",
+    "docx": "^9.6.1",
+    "mammoth": "^1.12.0",
     "shadcn-svelte": "^1.2.7",
     "tailwind-merge": "^3.5.0",
     "tailwind-variants": "^3.2.2"

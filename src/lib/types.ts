@@ -1,8 +1,7 @@
-/** Payload returned by the open_file Rust command. */
-export interface FilePayload {
-  path: string;
-  contents: string;
-}
+/** Payload returned by the open_file / read_file Rust commands. */
+export type OpenedFile =
+  | { kind: 'text'; path: string; contents: string }
+  | { kind: 'docx'; path: string; bytes_b64: string };
 
 /** Payload returned by the save_file_as Rust command. */
 export interface SaveAsResult {
