@@ -45,6 +45,7 @@
     "@tailwindcss/vite": "^4.2.2",
     "@tauri-apps/cli": "^2",
     "bits-ui": "^2.16.3",
+    "linkedom": "^0.18.12",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "tailwindcss": "^4.2.2",

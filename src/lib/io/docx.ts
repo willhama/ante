@@ -95,7 +95,13 @@ interface RunStyle {
 }
 
 function buildDocument(html: string): Document {
-  const dom = new DOMParser().parseFromString(`<!doctype html><body>${html}</body>`, 'text/html');
+  // Wrap in a complete document. Browser DOMParser auto-creates html/body
+  // from a fragment, but spec-leaning parsers (linkedom, used in tests)
+  // don't, so we hand them everything they need.
+  const dom = new DOMParser().parseFromString(
+    `<!doctype html><html><body>${html}</body></html>`,
+    'text/html',
+  );
   const body = dom.body;
   const children: Paragraph[] = [];
   for (const node of Array.from(body.childNodes)) {
