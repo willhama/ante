@@ -1,9 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
 import { message } from '@tauri-apps/plugin-dialog';
-import type { FilePayload, SaveAsResult, AnteError } from '$lib/types';
+import type { OpenedFile, SaveAsResult, AnteError } from '$lib/types';
 import { ERROR_MESSAGES } from '$lib/types';
 import { appState } from './app-state.svelte';
 import { recentFiles } from './recent-files.svelte';
+import { docxBytesToHtml, htmlToDocxBytes } from '$lib/io/docx';
 
 /** Snapshot of the document at last save, used for dirty detection. */
 let savedSnapshot = '';
@@ -106,22 +107,13 @@ export interface EditorBridge {
 
 /**
  * Open a file via native dialog. Replaces the editor content on success.
+ * Routes `.docx` through mammoth; everything else through the existing
+ * HTML/text path.
  */
 export async function openFile(bridge: EditorBridge): Promise<void> {
   try {
-    const result = await invoke<FilePayload>('open_file');
-    const { header, footer, stripped } = parseHeaderFooter(result.contents);
-
-    appState.filePath = result.path;
-    appState.headerText = header;
-    appState.footerText = footer;
-    // Snapshot tracks editor HTML only; header/footer edits flip isDirty
-    // directly from their input handlers.
-    savedSnapshot = stripped;
-    appState.isDirty = false;
-    recentFiles.add(result.path);
-
-    bridge.setHTML(stripped);
+    const result = await invoke<OpenedFile>('open_file');
+    await applyOpenedFile(result, bridge);
   } catch (err) {
     await showError(err);
   }
@@ -142,20 +134,49 @@ export async function openPath(path: string, bridge: EditorBridge): Promise<void
   }
 
   try {
-    const result = await invoke<FilePayload>('read_file', { path });
-    const { header, footer, stripped } = parseHeaderFooter(result.contents);
-
-    appState.filePath = result.path;
-    appState.headerText = header;
-    appState.footerText = footer;
-    savedSnapshot = stripped;
-    appState.isDirty = false;
-    recentFiles.add(result.path);
-
-    bridge.setHTML(stripped);
+    const result = await invoke<OpenedFile>('read_file', { path });
+    await applyOpenedFile(result, bridge);
   } catch (err) {
     await showError(err);
   }
+}
+
+/**
+ * Apply an OpenedFile payload to the editor, branching on kind.
+ * - text: existing header/footer extraction + setHTML
+ * - docx: mammoth-converted HTML, no header/footer (DOCX has its own model)
+ */
+async function applyOpenedFile(file: OpenedFile, bridge: EditorBridge): Promise<void> {
+  if (file.kind === 'docx') {
+    const { html, warnings } = await docxBytesToHtml(file.bytes_b64);
+    appState.filePath = file.path;
+    appState.headerText = '';
+    appState.footerText = '';
+    savedSnapshot = html;
+    appState.isDirty = false;
+    recentFiles.add(file.path);
+    bridge.setHTML(html);
+    if (warnings.length > 0) {
+      // Surface the first 3 mammoth warnings so the user knows about lost
+      // formatting (tables, footnotes, etc.) without a wall of text.
+      const preview = warnings.slice(0, 3).join('\n');
+      const more = warnings.length > 3 ? `\n... and ${warnings.length - 3} more` : '';
+      await message(`Imported with some unsupported formatting:\n\n${preview}${more}`, {
+        title: 'ante',
+        kind: 'info',
+      });
+    }
+    return;
+  }
+
+  const { header, footer, stripped } = parseHeaderFooter(file.contents);
+  appState.filePath = file.path;
+  appState.headerText = header;
+  appState.footerText = footer;
+  savedSnapshot = stripped;
+  appState.isDirty = false;
+  recentFiles.add(file.path);
+  bridge.setHTML(stripped);
 }
 
 /**
@@ -207,6 +228,26 @@ export async function saveFileAs(bridge: EditorBridge): Promise<void> {
     savedSnapshot = editorHtml;
     appState.isDirty = false;
     recentFiles.add(result.path);
+  } catch (err) {
+    await showError(err);
+  }
+}
+
+/**
+ * Export the current document to a `.docx` file via the native save dialog.
+ * Header / footer text from app state is dropped; DOCX has its own model.
+ */
+export async function exportAsDocx(bridge: EditorBridge): Promise<void> {
+  const editorHtml = bridge.getHTML();
+  const suggestedName = appState.filePath
+    ? appState.filePath.split(/[\\/]/).pop()?.replace(/\.[^./\\]+$/, '.docx') || 'Untitled.docx'
+    : 'Untitled.docx';
+  try {
+    const bytesB64 = await htmlToDocxBytes(editorHtml);
+    await invoke<SaveAsResult>('save_docx_as', {
+      bytesB64,
+      suggestedName,
+    });
   } catch (err) {
     await showError(err);
   }

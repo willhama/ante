@@ -16,6 +16,7 @@
     openPath,
     saveFile,
     saveFileAs,
+    exportAsDocx,
     newFile,
     promptUnsavedChanges,
     getSavedSnapshot,
@@ -115,6 +116,10 @@
 
   async function handleSave(): Promise<void> {
     await saveFile(getBridge());
+  }
+
+  async function handleExportDocx(): Promise<void> {
+    await exportAsDocx(getBridge());
   }
 
   async function handleInsertImage(): Promise<void> {
@@ -278,6 +283,7 @@
     onOpen={handleOpen}
     onSave={handleSave}
     onSaveAs={() => saveFileAs(getBridge())}
+    onExportDocx={handleExportDocx}
     onToggleSidebar={() => (appState.sidebarOpen = !appState.sidebarOpen)}
     onToggleAi={toggleAi}
     onInsertImage={handleInsertImage}

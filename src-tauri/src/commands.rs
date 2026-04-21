@@ -9,10 +9,15 @@ const MAX_FILE_SIZE: u64 = 10 * 1024 * 1024;
 /// Number of bytes to scan for null bytes (binary detection).
 const BINARY_CHECK_LEN: usize = 8192;
 
+/// Discriminated payload returned by `open_file` / `read_file` so the
+/// frontend can branch on file kind without re-sniffing the path.
 #[derive(Serialize)]
-pub struct FilePayload {
-    pub path: String,
-    pub contents: String,
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum OpenedFile {
+    /// Plain-text file (HTML, MD, TXT, ...). Validated UTF-8.
+    Text { path: String, contents: String },
+    /// Binary `.docx` file. `bytes_b64` is the file contents base64-encoded.
+    Docx { path: String, bytes_b64: String },
 }
 
 #[derive(Serialize)]
@@ -155,10 +160,10 @@ pub async fn move_path(src: String, dst_dir: String) -> Result<SaveAsResult, Ant
 }
 
 /// Reads a file at the given path. Used by the sidebar to open a file the user
-/// clicked, bypassing the native picker dialog. Same size + UTF-8 + binary
-/// guards as `open_file`.
+/// clicked, bypassing the native picker dialog. Routes `.docx` to the binary
+/// path; everything else is read as UTF-8 text with the usual guards.
 #[tauri::command]
-pub async fn read_file(path: String) -> Result<FilePayload, AnteError> {
+pub async fn read_file(path: String) -> Result<OpenedFile, AnteError> {
     let metadata = tokio::fs::metadata(&path).await?;
     if metadata.len() > MAX_FILE_SIZE {
         return Err(AnteError::FileTooLarge(format!(
@@ -168,6 +173,12 @@ pub async fn read_file(path: String) -> Result<FilePayload, AnteError> {
         )));
     }
     let buf = tokio::fs::read(&path).await?;
+
+    if is_docx_path(&path) {
+        let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
+        return Ok(OpenedFile::Docx { path, bytes_b64 });
+    }
+
     if is_binary(&buf) {
         return Err(AnteError::BinaryFile(format!(
             "File appears to be binary: {}",
@@ -175,7 +186,12 @@ pub async fn read_file(path: String) -> Result<FilePayload, AnteError> {
         )));
     }
     let contents = validate_utf8(buf, &path)?;
-    Ok(FilePayload { path, contents })
+    Ok(OpenedFile::Text { path, contents })
+}
+
+/// Returns true if the path ends with `.docx` (case-insensitive).
+fn is_docx_path(path: &str) -> bool {
+    path.to_lowercase().ends_with(".docx")
 }
 
 /// Returns true if the buffer contains null bytes in the first BINARY_CHECK_LEN bytes.
@@ -247,13 +263,16 @@ fn mime_from_path(path: &str) -> &'static str {
     }
 }
 
-/// Opens a native file dialog and reads the selected file.
+/// Opens a native file dialog and reads the selected file. Routes `.docx`
+/// through the binary path; everything else is read as UTF-8 text.
 #[tauri::command]
-pub async fn open_file(app: tauri::AppHandle) -> Result<FilePayload, AnteError> {
+pub async fn open_file(app: tauri::AppHandle) -> Result<OpenedFile, AnteError> {
     let file_path = app
         .dialog()
         .file()
+        .add_filter("All Supported", &["html", "htm", "docx", "txt", "md", "text", "markdown", "rst", "log"])
         .add_filter("HTML Files", &["html", "htm"])
+        .add_filter("Word Documents", &["docx"])
         .add_filter("Text Files", &["txt", "md", "text", "markdown", "rst", "log"])
         .add_filter("All Files", &["*"])
         .blocking_pick_file();
@@ -275,6 +294,14 @@ pub async fn open_file(app: tauri::AppHandle) -> Result<FilePayload, AnteError> 
 
     let buf = tokio::fs::read(&file_path).await?;
 
+    if is_docx_path(&file_path) {
+        let bytes_b64 = base64::engine::general_purpose::STANDARD.encode(&buf);
+        return Ok(OpenedFile::Docx {
+            path: file_path,
+            bytes_b64,
+        });
+    }
+
     if is_binary(&buf) {
         return Err(AnteError::BinaryFile(format!(
             "File appears to be binary: {}",
@@ -284,7 +311,7 @@ pub async fn open_file(app: tauri::AppHandle) -> Result<FilePayload, AnteError> 
 
     let contents = validate_utf8(buf, &file_path)?;
 
-    Ok(FilePayload {
+    Ok(OpenedFile::Text {
         path: file_path,
         contents,
     })
@@ -322,18 +349,53 @@ pub async fn save_file_as(
     Ok(SaveAsResult { path: file_path })
 }
 
+/// Opens a native save dialog filtered to `.docx` and writes binary bytes
+/// (decoded from base64) to the chosen path. Used for Word document export.
+#[tauri::command]
+pub async fn save_docx_as(
+    app: tauri::AppHandle,
+    bytes_b64: String,
+    suggested_name: Option<String>,
+) -> Result<SaveAsResult, AnteError> {
+    let mut dialog = app
+        .dialog()
+        .file()
+        .add_filter("Word Document", &["docx"]);
+
+    if let Some(name) = suggested_name {
+        dialog = dialog.set_file_name(&name);
+    }
+
+    let file_path = match dialog.blocking_save_file() {
+        Some(p) => p.to_string(),
+        None => return Err(AnteError::DialogCancelled),
+    };
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(bytes_b64.as_bytes())
+        .map_err(|e| AnteError::Io(format!("invalid base64 payload: {}", e)))?;
+
+    atomic_write_bytes(&file_path, &bytes).await?;
+
+    Ok(SaveAsResult { path: file_path })
+}
+
 /// Writes contents to a file atomically: write to temp file in the same directory,
 /// then rename. Falls back to direct overwrite if rename fails.
 async fn atomic_write(path: &str, contents: &str) -> Result<(), AnteError> {
+    atomic_write_bytes(path, contents.as_bytes()).await
+}
+
+/// Binary-safe version of `atomic_write`. Used for `.docx` export.
+async fn atomic_write_bytes(path: &str, bytes: &[u8]) -> Result<(), AnteError> {
     let tmp_path = format!("{}.tmp~", path);
 
-    tokio::fs::write(&tmp_path, contents.as_bytes()).await?;
+    tokio::fs::write(&tmp_path, bytes).await?;
 
     match tokio::fs::rename(&tmp_path, path).await {
         Ok(()) => Ok(()),
         Err(_rename_err) => {
-            // Fallback: direct overwrite. Remove temp file best-effort.
-            let result = tokio::fs::write(path, contents.as_bytes()).await;
+            let result = tokio::fs::write(path, bytes).await;
             let _ = tokio::fs::remove_file(&tmp_path).await;
             result.map_err(AnteError::from)
         }
@@ -423,5 +485,43 @@ mod tests {
         let result = validate_utf8(buf, "empty.txt");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "");
+    }
+
+    #[test]
+    fn test_is_docx_path_recognizes_extension() {
+        assert!(is_docx_path("document.docx"));
+        assert!(is_docx_path("/path/to/Report.DOCX"));
+        assert!(is_docx_path("My File.Docx"));
+    }
+
+    #[test]
+    fn test_is_docx_path_rejects_non_docx() {
+        assert!(!is_docx_path("document.html"));
+        assert!(!is_docx_path("document.doc"));
+        assert!(!is_docx_path("docx"));
+        assert!(!is_docx_path("docx.html"));
+        assert!(!is_docx_path(""));
+    }
+
+    #[test]
+    fn test_opened_file_text_serialization_tag() {
+        let payload = OpenedFile::Text {
+            path: "/tmp/x.html".into(),
+            contents: "<p>hi</p>".into(),
+        };
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"kind\":\"text\""));
+        assert!(json.contains("\"contents\":\"<p>hi</p>\""));
+    }
+
+    #[test]
+    fn test_opened_file_docx_serialization_tag() {
+        let payload = OpenedFile::Docx {
+            path: "/tmp/x.docx".into(),
+            bytes_b64: "UEsDBBQAAAA".into(),
+        };
+        let json = serde_json::to_string(&payload).unwrap();
+        assert!(json.contains("\"kind\":\"docx\""));
+        assert!(json.contains("\"bytes_b64\":\"UEsDBBQAAAA\""));
     }
 }

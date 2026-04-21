@@ -10,12 +10,13 @@
     onOpen?: () => void;
     onSave?: () => void;
     onSaveAs?: () => void;
+    onExportDocx?: () => void;
     onToggleSidebar?: () => void;
     onToggleAi?: () => void;
     onInsertImage?: () => void;
   }
 
-  let { editor, onNew, onOpen, onSave, onSaveAs, onToggleSidebar, onToggleAi, onInsertImage }: Props = $props();
+  let { editor, onNew, onOpen, onSave, onSaveAs, onExportDocx, onToggleSidebar, onToggleAi, onInsertImage }: Props = $props();
 
   function setPageSize(e: Event): void {
     appState.pageSize = (e.target as HTMLSelectElement).value as PageSize;
@@ -208,6 +209,18 @@
         <polyline points="14 21 14 13 7 13 7 18"></polyline>
         <polyline points="7 3 7 8 13 8"></polyline>
         <path d="M18.5 14.5l3 3-4 4h-3v-3z"></path>
+      </svg>
+    </button>
+    <button
+      class="toolbar-btn"
+      title="Export as Word (.docx)"
+      onclick={onExportDocx}
+      aria-label="Export as Word document"
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <text x="7" y="18" font-family="system-ui, sans-serif" font-size="6" font-weight="700" fill="currentColor" stroke="none">W</text>
       </svg>
     </button>
   </div>
