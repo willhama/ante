@@ -67,7 +67,7 @@
   const PROVIDER_ORDER: ProviderId[] = ['openai', 'anthropic', 'openai-compatible'];
 
   const PROVIDER_DEFAULTS: Record<ProviderId, { model: string; base_url: string }> = {
-    openai: { model: 'gpt-4o-mini', base_url: 'https://api.openai.com/v1' },
+    openai: { model: 'gpt-5.4-nano', base_url: 'https://api.openai.com/v1' },
     anthropic: { model: 'claude-haiku-4-5-20251001', base_url: 'https://api.anthropic.com' },
     'openai-compatible': { model: '', base_url: '' },
   };
@@ -77,10 +77,14 @@
     { value: string; label: string; hint: string }[]
   > = {
     openai: [
-      { value: 'gpt-4o-mini', label: 'gpt-4o-mini', hint: 'fast & cheap' },
-      { value: 'gpt-4o', label: 'gpt-4o', hint: 'balanced quality' },
-      { value: 'gpt-4.1-mini', label: 'gpt-4.1-mini', hint: 'newer mini' },
-      { value: 'gpt-4.1', label: 'gpt-4.1', hint: 'flagship quality' },
+      { value: 'gpt-5.4-nano', label: 'gpt-5.4-nano', hint: 'fast & cheap' },
+      { value: 'gpt-5.4-mini', label: 'gpt-5.4-mini', hint: 'balanced' },
+      { value: 'gpt-5.4', label: 'gpt-5.4', hint: 'flagship' },
+      { value: 'gpt-5-mini', label: 'gpt-5-mini', hint: 'prev gen mini' },
+      { value: 'gpt-5', label: 'gpt-5', hint: 'prev gen flagship' },
+      { value: 'gpt-4.1-mini', label: 'gpt-4.1-mini', hint: 'legacy mini' },
+      { value: 'gpt-4.1', label: 'gpt-4.1', hint: 'legacy' },
+      { value: 'gpt-4o-mini', label: 'gpt-4o-mini', hint: 'legacy fast' },
     ],
     anthropic: [
       { value: 'claude-haiku-4-5-20251001', label: 'claude-haiku-4-5', hint: 'fast & cheap' },
